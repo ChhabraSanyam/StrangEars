@@ -8,8 +8,10 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-// Import routes (to be created later)
-// import apiRoutes from './routes';
+// Import routes and middleware
+import apiRoutes from './routes';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { SocketService } from './services/socketService';
 
 // Initialize express app
 const app = express();
@@ -31,27 +33,20 @@ app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'StrangEars API is running' });
-});
+// API routes
+app.use('/api', apiRoutes);
 
-// API routes (to be implemented)
-// app.use('/api', apiRoutes);
+// Initialize Socket.IO service
+const socketService = new SocketService(io);
 
-// Socket.IO connection handling
-io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
-  
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
-});
+// Error handling middleware (must be after all routes)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-export { app, server, io };
+export { app, server, io, socketService };

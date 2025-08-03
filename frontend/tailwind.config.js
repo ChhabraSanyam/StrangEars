@@ -81,9 +81,9 @@ export default {
       },
       // Optimized opacity values - only used opacities
       opacity: {
+        70: "0.70",
         15: "0.15",
-        12: "0.12",
-        "08": "0.08",
+        10: "0.10",
       },
       // Optimized transition timing functions - only used functions
       transitionTimingFunction: {

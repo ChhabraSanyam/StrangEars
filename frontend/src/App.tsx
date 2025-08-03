@@ -1,7 +1,14 @@
 import { useState, useEffect } from "react";
 import "./App.css";
+import WaitingRoom from "./components/WaitingRoom";
+import ChatInterface from "./components/ChatInterface";
+import { Message } from "./types/chat";
+import { matchingApiService } from "./services/matchingService";
+import { useSocket } from "./hooks/useSocket";
+import { reportService } from "./services/reportService";
 
-type ViewState = "initial" | "form" | "guidelines";
+
+type ViewState = "initial" | "form" | "guidelines" | "waiting" | "matched";
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewState>("initial");
@@ -10,6 +17,84 @@ function App() {
   const [usernameConfirmed, setUsernameConfirmed] = useState(false);
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
   const [showButtonsAnimation, setShowButtonsAnimation] = useState(false);
+  const [matchingData, setMatchingData] = useState<{
+    socketId?: string;
+    estimatedWaitTime?: number;
+    userType?: 'venter' | 'listener';
+    sessionId?: string;
+  }>({});
+  const [error, setError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [otherUserConnected, setOtherUserConnected] = useState(false);
+  const [otherUserName, setOtherUserName] = useState<string | undefined>(undefined);
+  const [otherUserPhoto, setOtherUserPhoto] = useState<File | null>(null);
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+
+  // Socket integration
+  const {
+    connect,
+    disconnect,
+    joinSession,
+    sendMessage,
+    endSession,
+    sendTypingStatus,
+    connectionStatus,
+    isConnected,
+    socketId
+  } = useSocket({
+    onMessage: (message) => {
+      setChatMessages(prev => [...prev, message]);
+    },
+    onSessionJoined: () => {
+      // Don't set otherUserConnected here - wait for user-joined event
+    },
+    onSessionEnded: (reason, endedBy) => {
+      handleSessionEnded(reason, endedBy);
+    },
+    onConnectionStatusChange: () => {
+    },
+    onUserJoined: (otherUserName?: string, otherUserPhotoBase64?: string) => {
+      setOtherUserConnected(true);
+      setOtherUserName(otherUserName);
+      
+      // Convert base64 back to File if provided
+      if (otherUserPhotoBase64) {
+        fetch(otherUserPhotoBase64)
+          .then(res => res.blob())
+          .then(blob => {
+            const file = new File([blob], 'profile.jpg', { type: blob.type });
+            setOtherUserPhoto(file);
+          })
+          .catch(err => {
+            console.error('Error converting profile photo:', err);
+            setOtherUserPhoto(null);
+          });
+      } else {
+        setOtherUserPhoto(null);
+      }
+    },
+    onUserLeft: () => {
+      setOtherUserConnected(false);
+      setOtherUserName(undefined);
+      setOtherUserPhoto(null);
+      setIsOtherUserTyping(false);
+    },
+    onError: (error) => {
+      setError(error);
+    },
+    onMatchFound: (sessionId, userType) => {
+      setMatchingData({
+        sessionId,
+        userType
+      });
+      setCurrentView('matched');
+      // Join the socket session with username and profile photo
+      joinSession(sessionId, userType, username, profilePhoto);
+    },
+    onUserTyping: (isTyping) => {
+      setIsOtherUserTyping(isTyping);
+    }
+  });
 
   // Check if user has confirmed username (show buttons)
   const showButtons = usernameConfirmed && username.trim().length > 0;
@@ -20,6 +105,11 @@ function App() {
 
   useEffect(() => {
     const handleScroll = (e: WheelEvent) => {
+      // Allow normal scrolling in chat interface and waiting room
+      if (currentView === "matched" || currentView === "waiting") {
+        return;
+      }
+
       e.preventDefault();
 
       // Don't allow scrolling away from form view when buttons are shown
@@ -48,20 +138,243 @@ function App() {
     return () => window.removeEventListener("wheel", handleScroll);
   }, [currentView, showButtons]);
 
-  const handleVentClick = () => {
-    console.log("User selected: Vent", { username, profilePhoto });
-    // TODO: Navigate to waiting room or matching service
+  const handleVentClick = async () => {
+    await handleMatchRequest('venter');
   };
 
-  const handleListenClick = () => {
-    console.log("User selected: Listen", { username, profilePhoto });
-    // TODO: Navigate to waiting room or matching service
+  const handleListenClick = async () => {
+    await handleMatchRequest('listener');
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMatchRequest = async (userType: 'venter' | 'listener') => {
+    try {
+      setError(null);
+      
+      // Connect to socket first
+      connect();
+      
+      // Wait for socket to connect and get an ID with proper timeout
+      let attempts = 0;
+      const maxAttempts = 50; // 5 seconds total
+      
+      while (!socketId && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      if (!socketId || !isConnected) {
+        setError('Failed to establish connection. Please try again.');
+        return;
+      }
+      
+      const response = await matchingApiService.requestMatch(userType, socketId);
+      
+      if (response.status === 'matched') {
+        // Immediate match found - the match-found event will handle the transition
+      } else {
+        // Added to queue
+        setMatchingData({
+          socketId: response.socketId,
+          estimatedWaitTime: response.estimatedWaitTime,
+          userType: response.userType
+        });
+        setCurrentView('waiting');
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to request match');
+    }
+  };
+
+  const handleCancelMatch = async () => {
+    try {
+      if (matchingData.socketId) {
+        await matchingApiService.cancelMatch(matchingData.socketId);
+      }
+      
+      // Disconnect from socket
+      disconnect();
+      
+      setMatchingData({});
+      setCurrentView('form');
+      setError(null);
+      setHoveredButton(null); // Reset hover state
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to cancel match');
+    }
+  };
+
+  const handleSessionEnded = (reason: string, endedBy?: 'venter' | 'listener') => {
+    // Clean up local state
+    setChatMessages([]);
+    setMatchingData({});
+    setOtherUserConnected(false);
+    setOtherUserName(undefined);
+    setOtherUserPhoto(null);
+    setProfilePhoto(null); // Clear current user's profile photo
+    setCurrentView('form');
+    setHoveredButton(null); // Reset hover state
+    
+    // Show appropriate message based on how session ended
+    if (reason === 'user_disconnected') {
+      setError('The other user disconnected. You have been returned to the main page.');
+    } else if (reason === 'user_ended' && endedBy && endedBy !== matchingData.userType) {
+      setError('The other user ended the chat session.');
+    } else if (reason === 'reported') {
+      setError('The chat session has been terminated due to a report of inappropriate behavior.');
+    }
+    
+    // Clear error after a few seconds
+    setTimeout(() => setError(null), 5000);
+  };
+
+  const handleSendMessage = (content: string) => {
+    if (matchingData.sessionId && isConnected) {
+      sendMessage(matchingData.sessionId, content);
+    } else {
+      setError('Cannot send message: not connected to chat session');
+    }
+  };
+
+  const handleEndChat = () => {
+    if (matchingData.sessionId && isConnected) {
+      endSession(matchingData.sessionId);
+    } else {
+      // Fallback for when socket is not connected
+      handleSessionEnded('user_ended', matchingData.userType);
+    }
+  };
+
+  const handleReport = async () => {
+    if (!matchingData.sessionId || !matchingData.userType) {
+      setError('Cannot report: session information not available');
+      return;
+    }
+
+    try {
+      // Show confirmation dialog
+      const confirmed = window.confirm(
+        'Are you sure you want to report inappropriate behavior? This will immediately end the chat session for both users.'
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      // Submit the report
+      await reportService.submitReport({
+        sessionId: matchingData.sessionId,
+        reporterType: matchingData.userType,
+        reason: 'Inappropriate behavior reported by user'
+      });
+
+      // The session will be terminated by the backend
+      // The socket will receive a session-ended event
+      
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      setError(error instanceof Error ? error.message : 'Failed to submit report');
+    }
+  };
+
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+      
+      img.onload = () => {
+        // Aggressive compression for profile pictures
+        // Since they're displayed at 32px, we only need 64px for retina displays
+        const targetSize = 64;
+        
+        // Calculate new dimensions (square crop for profile pictures)
+        const size = Math.min(img.width, img.height);
+        const startX = (img.width - size) / 2;
+        const startY = (img.height - size) / 2;
+        
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        
+        // Enable image smoothing for better quality at small sizes
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Draw cropped and resized image
+        ctx.drawImage(
+          img,
+          startX, startY, size, size, // Source crop
+          0, 0, targetSize, targetSize // Destination
+        );
+        
+        // Try WebP first (most efficient), fallback to JPEG
+        canvas.toBlob((webpBlob) => {
+          if (webpBlob && webpBlob.size < file.size * 0.8) {
+            // WebP is significantly smaller, use it
+            const compressedFile = new File([webpBlob], 'profile.webp', {
+              type: 'image/webp',
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          } else {
+            // Fallback to highly compressed JPEG
+            canvas.toBlob((jpegBlob) => {
+              if (jpegBlob) {
+                const compressedFile = new File([jpegBlob], 'profile.jpg', {
+                  type: 'image/jpeg',
+                  lastModified: Date.now()
+                });
+                resolve(compressedFile);
+              } else {
+                resolve(file); // Final fallback
+              }
+            }, 'image/jpeg', 0.6); // Lower quality for smaller size
+          }
+        }, 'image/webp', 0.8);
+      };
+      
+      img.onerror = () => {
+        resolve(file); // Fallback to original if image loading fails
+      };
+      
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setProfilePhoto(file);
+    if (!file) return;
+
+    // File type validation
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please upload a valid image file (JPEG, PNG, or WebP)');
+      e.target.value = ''; // Clear the input
+      return;
+    }
+
+    try {
+      // Always compress profile pictures for optimal performance
+      // Since they're displayed at 32px, aggressive compression is acceptable
+      console.log('Optimizing profile picture...');
+      const processedFile = await compressImage(file);
+      
+      console.log(`Image optimized: ${file.size} bytes → ${processedFile.size} bytes (${Math.round((1 - processedFile.size / file.size) * 100)}% reduction)`);
+      
+      // Final size check after compression (should be very small now)
+      if (processedFile.size > 100 * 1024) { // 100KB limit after compression
+        setError('Image is still too large after optimization. Please try a different image.');
+        e.target.value = '';
+        return;
+      }
+      
+      // All validations passed
+      setProfilePhoto(processedFile);
+      setError(null); // Clear any previous errors
+      
+    } catch (error) {
+      console.error('Error processing image:', error);
+      setError('Failed to process image. Please try a different image.');
+      e.target.value = '';
     }
   };
 
@@ -75,6 +388,44 @@ function App() {
     setUsernameConfirmed(false);
   };
 
+
+  // Show waiting room if in waiting state
+  if (currentView === 'waiting' && matchingData.userType && matchingData.estimatedWaitTime !== undefined) {
+    return (
+      <WaitingRoom
+        userType={matchingData.userType}
+        estimatedWaitTime={matchingData.estimatedWaitTime}
+        onCancel={handleCancelMatch}
+      />
+    );
+  }
+
+  // Show chat interface when matched
+  if (currentView === 'matched' && matchingData.sessionId && matchingData.userType) {
+    return (
+      <ChatInterface
+        sessionId={matchingData.sessionId}
+        userRole={matchingData.userType}
+        messages={chatMessages}
+        onSendMessage={handleSendMessage}
+        onEndChat={handleEndChat}
+        onReport={handleReport}
+        connectionStatus={connectionStatus}
+        otherUserConnected={otherUserConnected}
+        otherUserName={otherUserName}
+        currentUserName={username}
+        currentUserPhoto={profilePhoto}
+        otherUserPhoto={otherUserPhoto}
+        isOtherUserTyping={isOtherUserTyping}
+        onTypingChange={(isTyping) => {
+          if (matchingData.sessionId) {
+            sendTypingStatus(matchingData.sessionId, isTyping);
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="h-screen bg-sage relative overflow-hidden" role="main">
       {/* Skip Navigation Link */}
@@ -84,22 +435,38 @@ function App() {
       >
         Skip to main content
       </a>
+
+      {/* Error Message */}
+      {error && (
+        <div className="fixed top-4 right-4 z-50 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-lg max-w-md">
+          <div className="flex items-center justify-between">
+            <span className="text-sm">{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="ml-4 text-red-500 hover:text-red-700"
+              aria-label="Close error message"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Background Leaf Elements */}
       <div
-        className="fixed -top-[10%] -left-[15%] w-[40%] h-[60%] bg-[url('/assets/bg-leaf.png')] bg-contain bg-no-repeat opacity-15 z-1 -rotate-[15deg]"
+        className="fixed -top-[15%] -left-[14%] w-[40%] h-[60%] bg-[url('/assets/bg-leaf.webp')] bg-contain bg-no-repeat opacity-15 z-1 -rotate-[15deg]"
         aria-hidden="true"
       />
       <div
-        className="fixed -bottom-[10%] -right-[15%] w-[45%] h-[65%] bg-[url('/assets/bg-leaf.png')] bg-contain bg-no-repeat opacity-12 z-1 rotate-[25deg] scale-x-[-1]"
+        className="fixed -bottom-[10%] -right-[15%] w-[45%] h-[65%] bg-[url('/assets/bg-leaf.webp')] bg-contain bg-no-repeat opacity-15 z-1 rotate-[25deg] scale-x-[-1]"
         aria-hidden="true"
       />
       <div
-        className="fixed top-[2%] right-[15%] w-[25%] h-[35%] bg-[url('/assets/bg-leaf.png')] bg-contain bg-no-repeat opacity-08 z-1 rotate-[45deg]"
+        className="fixed top-[2%] right-[15%] w-[25%] h-[35%] bg-[url('/assets/bg-leaf.webp')] bg-contain bg-no-repeat opacity-10 z-1 rotate-[45deg]"
         aria-hidden="true"
       />
       <div
-        className="fixed bottom-[15%] left-[15%] w-[30%] h-[40%] bg-[url('/assets/bg-leaf.png')] bg-contain bg-no-repeat opacity-[0.1] z-1 -rotate-[30deg] scale-y-[-1]"
+        className="fixed bottom-[15%] left-[15%] w-[30%] h-[40%] bg-[url('/assets/bg-leaf.webp')] bg-contain bg-no-repeat opacity-10 z-1 -rotate-[30deg] scale-y-[-1]"
         aria-hidden="true"
       />
 
@@ -120,7 +487,7 @@ function App() {
           }`}
         >
           <img
-            src="/assets/logo.png"
+            src="/assets/logo.webp"
             alt="StrangEars Logo"
             className="h-24 w-auto mr-3 -translate-y-4 md:h-20 md:mr-2 md:-translate-y-3 xs:h-16 xs:mr-2 xs:-translate-y-2"
           />
@@ -133,7 +500,7 @@ function App() {
           <h2 className="main-tagline">
             Hear. Vent. Connect.
             <img
-              src="/assets/chat-bubble.png"
+              src="/assets/chat-bubble.webp"
               alt="Chat Bubble"
               className="absolute -top-6 -right-10 h-14 w-auto opacity-60 md:h-10 md:-right-7 md:-top-4 xs:h-8 xs:-right-6 xs:-top-3"
             />
@@ -216,7 +583,7 @@ function App() {
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                   <circle cx="12" cy="7" r="4"></circle>
                 </svg>
-                <div className="absolute -bottom-0.5 -right-0.5 bg-slate-dark text-white rounded-full w-6 h-6 flex items-center justify-center border-2 border-sage xs:w-5 xs:h-5">
+                <div className="absolute -bottom-0.5 -right-0.5 bg-slate-light text-black rounded-full w-6 h-6 flex items-center justify-center border-2 border-sage xs:w-5 xs:h-5">
                   <svg
                     width="16"
                     height="16"
@@ -233,15 +600,15 @@ function App() {
             )}
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
               onChange={handlePhotoUpload}
               className="hidden"
               id="photo-upload"
-              aria-label="Upload profile photo (optional)"
+              aria-label="Upload profile photo (optional, auto-optimized)"
               aria-describedby="photo-help"
             />
             <div id="photo-help" className="sr-only">
-              Optional: Upload a profile photo to personalize your chat experience. Click the profile circle to select an image.
+              Optional: Upload a profile photo to personalize your chat experience. All images are automatically optimized to 64x64 pixels and compressed to WebP/JPEG format for maximum performance. Any image size or format is supported.
             </div>
           </div>
 
