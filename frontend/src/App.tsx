@@ -204,6 +204,9 @@ function App() {
   };
 
   const handleSessionEnded = (reason: string, endedBy?: 'venter' | 'listener') => {
+    // Store current user type before clearing matching data
+    const currentUserType = matchingData.userType;
+    
     // Clean up local state
     setChatMessages([]);
     setMatchingData({});
@@ -217,7 +220,7 @@ function App() {
     // Show appropriate message based on how session ended
     if (reason === 'user_disconnected') {
       setError('The other user disconnected. You have been returned to the main page.');
-    } else if (reason === 'user_ended' && endedBy && endedBy !== matchingData.userType) {
+    } else if (reason === 'user_ended' && endedBy && endedBy !== currentUserType) {
       setError('The other user ended the chat session.');
     } else if (reason === 'reported') {
       setError('The chat session has been terminated due to a report of inappropriate behavior.');

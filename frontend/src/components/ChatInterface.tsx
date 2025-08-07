@@ -38,13 +38,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 }) => {
   const [messageInput, setMessageInput] = useState('');
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const previousMessagesLength = useRef(messages.length);
   const [hasNewMessageFromOther, setHasNewMessageFromOther] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Auto-scroll to bottom only when:
   // 1. A new message arrives from the other user AND
@@ -57,6 +58,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Track when other user sends a new message
     if (hasNewMessage && isNewMessageFromOther) {
       setHasNewMessageFromOther(true);
+      // Only increment unread count if user is not at bottom
+      if (!isAtBottom) {
+        setUnreadCount(prev => prev + 1);
+      }
     }
     
     if (hasNewMessage && isNewMessageFromOther && isAtBottom && messagesEndRef.current) {
@@ -82,15 +87,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       
       setIsAtBottom(atBottom);
       
-      // Only show scroll to bottom button if:
+      // Show scroll to bottom button if:
       // 1. User is not at bottom AND
-      // 2. There are messages AND
-      // 3. The other user has sent a new message since last scroll to bottom
-      setShowScrollToBottom(!atBottom && messages.length > 0 && hasNewMessageFromOther);
+      // 2. There are messages
+      setShowScrollToBottom(!atBottom && messages.length > 0);
       
-      // Reset the flag when user scrolls to bottom
+      // Reset the flag and unread count when user scrolls to bottom
       if (atBottom) {
         setHasNewMessageFromOther(false);
+        setUnreadCount(0);
       }
     };
 
@@ -177,8 +182,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const scrollToBottom = () => {
     if (messagesEndRef.current && typeof messagesEndRef.current.scrollIntoView === 'function') {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      // Reset the flag when user manually scrolls to bottom
+      // Reset the flag and unread count when user manually scrolls to bottom
       setHasNewMessageFromOther(false);
+      setUnreadCount(0);
     }
   };
 
@@ -207,9 +213,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   return (
-    <div className="h-screen bg-sage flex flex-col">
+    <div 
+      className="h-screen bg-sage flex flex-col relative"
+      style={{
+        backgroundImage: 'url(/assets/leaf-bg.webp)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {/* Background overlay for better readability */}
+      <div className="absolute inset-0 bg-sage bg-opacity-20 pointer-events-none"></div>
+      
       {/* Header */}
-      <header className="bg-white bg-opacity-80 backdrop-blur-sm border-b border-gray-border px-6 py-4 flex-shrink-0">
+      <header className="bg-white bg-opacity-80 backdrop-blur-sm border-b border-gray-border px-6 py-4 flex-shrink-0 relative z-10">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
           {/* Logo and Title */}
           <div className="flex items-center">
@@ -265,7 +283,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </header>
 
       {/* Messages Area */}
-      <main className="flex-1 overflow-hidden flex flex-col relative">
+      <main className="flex-1 overflow-hidden flex flex-col relative z-10">
         <div 
           ref={messagesContainerRef}
           className="flex-1 overflow-y-auto px-6 py-4 scroll-smooth"
@@ -359,31 +377,41 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
         {/* Scroll Controls */}
         {showScrollToBottom && (
-          <div className="absolute right-6 bottom-32 z-10">
-            <button
-              onClick={scrollToBottom}
-              className="bg-sage-dark bg-opacity-70 hover:bg-sage-darker hover:bg-opacity-80 text-white p-2 rounded-full shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-2 animate-fade-in backdrop-blur-sm"
-              aria-label="Scroll to bottom of conversation"
-              title="Scroll to bottom"
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          <div className="absolute right-6 bottom-32 z-20">
+            <div className="relative">
+              {/* Unread count notification bubble */}
+              {unreadCount > 0 && (
+                <div className="absolute -top-1 -right-1 bg-sage-dark text-white text-[10px] font-medium rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-lg animate-fade-in z-20">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </div>
+              )}
+              
+              <button
+                onClick={scrollToBottom}
+                className="bg-sage-dark bg-opacity-70 hover:bg-sage-darker hover:bg-opacity-80 text-white p-2 rounded-full shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-2 animate-fade-in backdrop-blur-sm"
+                aria-label={unreadCount > 0 ? `${unreadCount} new messages - Scroll to bottom` : "Scroll to bottom of conversation"}
+                title={unreadCount > 0 ? `${unreadCount} new messages - Scroll to bottom` : "Scroll to bottom"}
               >
-                <path d="m6 9 6 6 6-6"/>
-              </svg>
-            </button>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={hasNewMessageFromOther ? 'animate-bounce-gentle' : ''}
+                >
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </button>
+            </div>
           </div>
         )}
 
         {/* Message Input Area */}
-        <div className="bg-white bg-opacity-80 backdrop-blur-sm border-t border-gray-border px-6 py-4 flex-shrink-0">
+        <div className="bg-white bg-opacity-80 backdrop-blur-sm border-t border-gray-border px-6 py-4 flex-shrink-0 relative z-10">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-start space-x-3">
               <div className="flex-1">

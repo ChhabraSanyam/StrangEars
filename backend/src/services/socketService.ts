@@ -129,7 +129,7 @@ export class SocketService {
       this.sessionSockets.get(sessionId)!.add(socket.id);
 
       // Check if we need to create a session in the session manager
-      let session = await this.sessionManager.getSession(sessionId);
+      const session = await this.sessionManager.getSession(sessionId);
       if (!session) {
         // Get the other participants to determine roles
         const sessionSockets = this.sessionSockets.get(sessionId);

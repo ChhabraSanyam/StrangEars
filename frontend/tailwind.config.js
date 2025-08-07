@@ -32,6 +32,7 @@ export default {
       // Optimized animations - only used animations
       animation: {
         "bounce-slow": "bounce 2s infinite",
+        "bounce-gentle": "bounceGentle 1s ease-in-out infinite",
         "fade-in-up-delayed": "fadeInUpDelayed 0.6s ease-out forwards",
       },
       // Optimized keyframes - only used keyframes
@@ -55,6 +56,17 @@ export default {
           },
           "60%": {
             transform: "translateY(-5px)",
+          },
+        },
+        bounceGentle: {
+          "0%, 70%, 100%": {
+            transform: "translateY(0)",
+          },
+          "15%": {
+            transform: "translateY(-2px)",
+          },
+          "30%": {
+            transform: "translateY(4px)",
           },
         },
       },

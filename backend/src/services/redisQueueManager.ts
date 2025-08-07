@@ -295,7 +295,7 @@ export class RedisQueueManager {
       const entryKeys = await client.keys(pattern);
 
       // Delete all queue entries and clear queues
-      const deletePromises = entryKeys.map(key => client.del(key));
+      const deletePromises = entryKeys.map((key: string) => client.del(key));
       await Promise.all([
         ...deletePromises,
         client.del(this.VENTER_QUEUE_KEY),
