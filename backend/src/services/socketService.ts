@@ -2,6 +2,9 @@ import { Server, Socket } from "socket.io";
 import { v4 as uuidv4 } from "uuid";
 import { ChatSessionManager } from "../models/ChatSession";
 import { matchingService } from "./matchingService";
+import { validateSocketData, schemas, filterContent } from "../middleware/validation";
+import { checkMessageThrottle } from "../middleware/socketThrottling";
+import { checkSocketMessageSpam } from "../middleware/spamPrevention";
 
 export interface SocketUser {
   socketId: string;
@@ -39,7 +42,7 @@ export class SocketService {
 
   private setupEventHandlers(): void {
     this.io.on("connection", (socket: Socket) => {
-
+      console.log(`Socket connected: ${socket.id} from ${socket.handshake.address}`);
 
       // Track connected user immediately
       const user: SocketUser = {
@@ -53,7 +56,13 @@ export class SocketService {
       socket.on(
         "join-session",
         (data: { sessionId: string; userType: "venter" | "listener" }) => {
-          this.handleJoinSession(socket, data);
+          // Validate input
+          const validation = validateSocketData(data, schemas.joinSession);
+          if (!validation.isValid) {
+            socket.emit("error", { message: validation.error });
+            return;
+          }
+          this.handleJoinSession(socket, validation.sanitizedData);
         }
       );
 
@@ -61,18 +70,53 @@ export class SocketService {
       socket.on(
         "send-message",
         (data: { sessionId: string; content: string }) => {
-          this.handleSendMessage(socket, data);
+          // Check throttling
+          const throttleCheck = checkMessageThrottle(socket);
+          if (!throttleCheck.allowed) {
+            socket.emit("error", { message: throttleCheck.reason });
+            return;
+          }
+
+          // Validate input
+          const validation = validateSocketData(data, schemas.socketMessage);
+          if (!validation.isValid) {
+            socket.emit("error", { message: validation.error });
+            return;
+          }
+
+          // Check for spam
+          const spamCheck = checkSocketMessageSpam(socket, validation.sanitizedData.content);
+          if (!spamCheck.allowed) {
+            socket.emit("error", { 
+              message: spamCheck.reason,
+              action: spamCheck.action 
+            });
+            return;
+          }
+
+          this.handleSendMessage(socket, validation.sanitizedData);
         }
       );
 
       // Handle ending session
       socket.on("end-session", (data: { sessionId: string }) => {
-        this.handleEndSession(socket, data);
+        // Validate input
+        const validation = validateSocketData(data, schemas.endSession);
+        if (!validation.isValid) {
+          socket.emit("error", { message: validation.error });
+          return;
+        }
+        this.handleEndSession(socket, validation.sanitizedData);
       });
 
       // Handle typing events
       socket.on("typing", (data: { sessionId: string; isTyping: boolean }) => {
-        this.handleTyping(socket, data);
+        // Validate input
+        const validation = validateSocketData(data, schemas.typing);
+        if (!validation.isValid) {
+          return; // Silently fail for typing events
+        }
+        this.handleTyping(socket, validation.sanitizedData);
       });
 
       // Handle disconnection
@@ -240,22 +284,23 @@ export class SocketService {
         return;
       }
 
-      // Validate message content
-      if (
-        !content ||
-        typeof content !== "string" ||
-        content.trim().length === 0
-      ) {
-        socket.emit("error", { message: "Message content is required" });
+      // Filter and validate message content
+      const contentFilter = filterContent(content);
+      if (!contentFilter.isAllowed) {
+        socket.emit("error", { 
+          message: contentFilter.reason || "Message content not allowed" 
+        });
         return;
       }
+
+      const filteredContent = contentFilter.filteredContent;
 
       // Add message to session
       const message = await this.sessionManager.addMessage(sessionId, {
         id: uuidv4(),
         sender: user.userType,
         senderName: user.username,
-        content: content.trim(),
+        content: filteredContent,
         timestamp: new Date(),
       });
 
@@ -320,6 +365,8 @@ export class SocketService {
         return;
       }
 
+
+
       // Notify all participants that the session is ending
       this.io.to(sessionId).emit("session-ended", {
         sessionId,
@@ -367,8 +414,13 @@ export class SocketService {
       const user = this.connectedUsers.get(socket.id);
 
       if (user && user.sessionId) {
+        // Get session before ending it for analytics
+        const session = await this.sessionManager.getSession(user.sessionId);
+        
         // End the session in the session manager
         await this.sessionManager.endSession(user.sessionId, socket.id);
+
+
 
         // Notify other participants about the disconnection and session end
         socket.to(user.sessionId).emit("session-ended", {
@@ -554,10 +606,11 @@ export class SocketService {
 
   // Start periodic cleanup of old sessions
   private startCleanupInterval(): void {
-    // Clean up old ended sessions every 30 minutes
+    // Clean up old ended sessions every 10 minutes (more aggressive for free tier)
     setInterval(async () => {
-      await this.sessionManager.cleanupOldSessions(60); // Clean sessions older than 1 hour
-    }, 30 * 60 * 1000); // Run every 30 minutes
+      await this.sessionManager.cleanupOldSessions(30); // Clean sessions older than 30 minutes
+      await matchingService.cleanupExpiredEntries(); // Also clean expired queue entries
+    }, 10 * 60 * 1000); // Run every 10 minutes
   }
 
   // Public methods for session management

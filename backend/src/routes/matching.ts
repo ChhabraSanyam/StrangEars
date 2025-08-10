@@ -1,12 +1,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler';
 import { matchingService } from '../services/matchingService';
+import { matchingRateLimit } from '../middleware/rateLimiting';
+import { validate, schemas } from '../middleware/validation';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
 // POST /api/match - Request matching
-router.post('/match', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/match', matchingRateLimit, validate(schemas.matchRequest), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { userType, socketId } = req.body;
 

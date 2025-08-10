@@ -6,21 +6,23 @@ export class RedisQueueManager {
   private readonly VENTER_QUEUE_KEY = 'queue:venters';
   private readonly LISTENER_QUEUE_KEY = 'queue:listeners';
   private readonly QUEUE_ENTRY_PREFIX = 'queue_entry:';
-  private readonly QUEUE_TIMEOUT = 5 * 60; // 5 minutes in seconds
+  private readonly QUEUE_TIMEOUT = 3 * 60; // 3 minutes in seconds (reduced for memory optimization)
 
   /**
-   * Add a user to the appropriate queue
+   * Add a user to the appropriate queue - memory optimized
    */
   async addToQueue(socketId: string, userType: 'venter' | 'listener'): Promise<void> {
     try {
       const client = await redisClient.getClient();
-      const entry: QueueEntry = {
+      
+      // Store minimal entry data to save memory
+      const entry = {
         socketId,
         type: userType,
-        joinedAt: new Date()
+        joinedAt: Date.now() // Use timestamp instead of Date object
       };
 
-      // Store queue entry data
+      // Store queue entry data with shorter expiry
       const entryKey = this.getQueueEntryKey(socketId);
       await client.setex(entryKey, this.QUEUE_TIMEOUT, JSON.stringify(entry));
 
@@ -28,7 +30,7 @@ export class RedisQueueManager {
       const queueKey = userType === 'venter' ? this.VENTER_QUEUE_KEY : this.LISTENER_QUEUE_KEY;
       await client.lpush(queueKey, socketId);
 
-      console.log(`Added ${userType} ${socketId} to Redis queue`);
+      console.log(`Added ${userType} ${socketId} to Redis queue (memory optimized)`);
     } catch (error) {
       console.error('Error adding to Redis queue:', error);
       throw new Error('Failed to add to queue');

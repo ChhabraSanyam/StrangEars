@@ -5,7 +5,6 @@ export interface RedisConfig {
   port: number;
   password?: string;
   db?: number;
-  retryDelayOnFailover?: number;
   maxRetriesPerRequest?: number;
   lazyConnect?: boolean;
   connectTimeout?: number;
@@ -26,19 +25,27 @@ class RedisClient {
     }
 
     try {
-      const config: RedisConfig = {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD,
-        db: parseInt(process.env.REDIS_DB || '0'),
-        retryDelayOnFailover: 100,
-        maxRetriesPerRequest: 1, // Fail fast for initial connection
-        lazyConnect: true,
-        connectTimeout: 5000, // 5 second timeout
-        commandTimeout: 5000
-      };
-
-      this.client = new Redis(config);
+      // Use REDIS_URL for cloud hosting (Render, Heroku, etc.) or individual config for local
+      if (process.env.REDIS_URL) {
+        this.client = new Redis(process.env.REDIS_URL, {
+          maxRetriesPerRequest: 1,
+          lazyConnect: true,
+          connectTimeout: 5000,
+          commandTimeout: 5000
+        });
+      } else {
+        const config = {
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+          password: process.env.REDIS_PASSWORD,
+          db: parseInt(process.env.REDIS_DB || '0'),
+          maxRetriesPerRequest: 1,
+          lazyConnect: true,
+          connectTimeout: 5000,
+          commandTimeout: 5000
+        };
+        this.client = new Redis(config);
+      }
 
       this.client.on('connect', () => {
         console.log('Redis client connected');

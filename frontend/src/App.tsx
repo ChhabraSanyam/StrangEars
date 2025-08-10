@@ -150,12 +150,16 @@ function App() {
     try {
       setError(null);
       
-      // Connect to socket first
-      connect();
+      // Socket should already be connected from username confirmation
+      // But ensure it's connected with a shorter timeout since it should be ready
+      if (!isConnected) {
+        // Try to connect if not already connected
+        connect();
+      }
       
-      // Wait for socket to connect and get an ID with proper timeout
+      // Wait for socket to be ready with a reasonable timeout
       let attempts = 0;
-      const maxAttempts = 50; // 5 seconds total
+      const maxAttempts = 30; // 3 seconds total (shorter since socket should already be connecting)
       
       while (!socketId && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -163,7 +167,7 @@ function App() {
       }
       
       if (!socketId || !isConnected) {
-        setError('Failed to establish connection. Please try again.');
+        setError('Connection not ready. Please wait a moment and try again.');
         return;
       }
       
@@ -191,8 +195,8 @@ function App() {
         await matchingApiService.cancelMatch(matchingData.socketId);
       }
       
-      // Disconnect from socket
-      disconnect();
+      // Don't disconnect from socket - keep it connected for potential retry
+      // disconnect();
       
       setMatchingData({});
       setCurrentView('form');
@@ -207,13 +211,14 @@ function App() {
     // Store current user type before clearing matching data
     const currentUserType = matchingData.userType;
     
-    // Clean up local state
+    // Clean up local state but keep socket connected for immediate retry
     setChatMessages([]);
     setMatchingData({});
     setOtherUserConnected(false);
     setOtherUserName(undefined);
     setOtherUserPhoto(null);
-    setProfilePhoto(null); // Clear current user's profile photo
+    // Don't clear profile photo - keep it for next session
+    // setProfilePhoto(null);
     setCurrentView('form');
     setHoveredButton(null); // Reset hover state
     
@@ -384,11 +389,15 @@ function App() {
   const handleUsernameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && username.trim().length > 0) {
       setUsernameConfirmed(true);
+      // Connect to socket immediately after username is confirmed
+      connect();
     }
   };
 
   const handleUsernameEdit = () => {
     setUsernameConfirmed(false);
+    // Disconnect socket when editing username
+    disconnect();
   };
 
 
@@ -645,6 +654,20 @@ function App() {
           </div>
         </section>
 
+        {/* Connection Status Indicator */}
+        {showButtons && connectionStatus !== 'connected' && (
+          <div className="absolute top-[55%] left-1/2 -translate-x-1/2 text-center">
+            <div className="flex items-center justify-center gap-2 text-slate-medium">
+              <div className="w-2 h-2 bg-slate-medium rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium">
+                {connectionStatus === 'connecting' ? 'Connecting...' : 
+                 connectionStatus === 'reconnecting' ? 'Reconnecting...' : 
+                 'Preparing connection...'}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Question and Action Buttons */}
         {showButtons && (
           <section
@@ -661,9 +684,10 @@ function App() {
             <div className="flex justify-between w-full max-w-[800px] md:max-w-[500px] xs:max-w-[500px] mx-auto relative h-auto min-h-[60px]">
               <button
                 onClick={handleVentClick}
-                className="action-button vent-button"
+                className={`action-button vent-button ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onMouseEnter={() => setHoveredButton("vent")}
                 onMouseLeave={() => setHoveredButton(null)}
+                disabled={connectionStatus !== 'connected'}
                 aria-label="Choose to vent - talk to someone who will listen with empathy"
                 aria-describedby="vent-description"
               >
@@ -677,9 +701,10 @@ function App() {
 
               <button
                 onClick={handleListenClick}
-                className="action-button listen-button"
+                className={`action-button listen-button ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onMouseEnter={() => setHoveredButton("listen")}
                 onMouseLeave={() => setHoveredButton(null)}
+                disabled={connectionStatus !== 'connected'}
                 aria-label="Choose to listen - help others feel heard and understood"
                 aria-describedby="listen-description"
               >

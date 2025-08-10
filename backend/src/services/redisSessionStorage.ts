@@ -4,18 +4,30 @@ import { ChatSession, Message } from '../models/ChatSession';
 export class RedisSessionStorage {
   private readonly SESSION_PREFIX = 'session:';
   private readonly USER_SESSION_PREFIX = 'user_session:';
-  private readonly SESSION_EXPIRY = 24 * 60 * 60; // 24 hours in seconds
+  private readonly SESSION_EXPIRY = 2 * 60 * 60; // 2 hours in seconds (reduced for memory optimization)
 
   /**
    * Store a chat session in Redis with automatic expiration
+   * Optimized for minimal memory usage on free tier
    */
   async storeSession(session: ChatSession): Promise<void> {
     try {
       const client = await redisClient.getClient();
       const sessionKey = this.getSessionKey(session.id);
       
-      // Store session data as JSON
-      const sessionData = JSON.stringify(session);
+      // Store only essential session data to minimize memory usage
+      const minimalSession = {
+        id: session.id,
+        venterSocketId: session.venterSocketId,
+        listenerSocketId: session.listenerSocketId,
+        status: session.status,
+        createdAt: session.createdAt,
+        endedAt: session.endedAt,
+        // Store only last 20 messages to save memory
+        messages: session.messages.slice(-20)
+      };
+      
+      const sessionData = JSON.stringify(minimalSession);
       await client.setex(sessionKey, this.SESSION_EXPIRY, sessionData);
 
       // Store user-to-session mappings for quick lookup
@@ -27,7 +39,7 @@ export class RedisSessionStorage {
         client.setex(listenerKey, this.SESSION_EXPIRY, session.id)
       ]);
 
-      console.log(`Session ${session.id} stored in Redis`);
+      console.log(`Session ${session.id} stored in Redis (memory optimized)`);
     } catch (error) {
       console.error('Error storing session in Redis:', error);
       throw new Error('Failed to store session in Redis');
@@ -362,9 +374,9 @@ export class RedisSessionStorage {
   }
 
   /**
-   * Auto-cleanup old ended sessions
+   * Auto-cleanup old ended sessions - optimized for free tier memory limits
    */
-  async cleanupOldSessions(maxAgeMinutes: number = 60): Promise<number> {
+  async cleanupOldSessions(maxAgeMinutes: number = 30): Promise<number> {
     try {
       const client = await redisClient.getClient();
       const pattern = this.getSessionKey('*');
@@ -378,15 +390,21 @@ export class RedisSessionStorage {
         if (sessionData) {
           const session = JSON.parse(sessionData) as ChatSession;
           const endedAt = session.endedAt ? new Date(session.endedAt) : null;
+          const createdAt = new Date(session.createdAt);
           
-          if (session.status === 'ended' && endedAt && endedAt < cutoffTime) {
+          // Clean up ended sessions or very old active sessions
+          const shouldCleanup = 
+            (session.status === 'ended' && endedAt && endedAt < cutoffTime) ||
+            (createdAt < new Date(Date.now() - 2 * 60 * 60 * 1000)); // 2 hours max
+          
+          if (shouldCleanup) {
             await this.deleteSession(session.id);
             cleanedCount++;
           }
         }
       }
 
-      console.log(`Cleaned up ${cleanedCount} old sessions from Redis`);
+      console.log(`Cleaned up ${cleanedCount} old sessions from Redis (memory optimized)`);
       return cleanedCount;
     } catch (error) {
       console.error('Error cleaning up old sessions:', error);

@@ -2,11 +2,13 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler';
 import { reportService } from '../services/reportService';
 import { SocketService } from '../services/socketService';
+import { reportRateLimit, adminRateLimit } from '../middleware/rateLimiting';
+import { validate, validateQuery, schemas } from '../middleware/validation';
 
 const router = Router();
 
 // POST /api/report - Submit a report
-router.post('/report', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/report', reportRateLimit, validate(schemas.reportSubmission), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { sessionId, reporterType, reason, reporterSocketId } = req.body;
 
@@ -84,7 +86,7 @@ router.post('/report', async (req: Request, res: Response, next: NextFunction) =
 });
 
 // GET /api/report/stats - Get report statistics (admin endpoint)
-router.get('/report/stats', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/report/stats', adminRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const stats = await reportService.getEnhancedReportStats();
     
@@ -98,7 +100,7 @@ router.get('/report/stats', async (req: Request, res: Response, next: NextFuncti
 });
 
 // GET /api/report/recent - Get recent reports (admin endpoint)
-router.get('/report/recent', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/report/recent', adminRateLimit, validateQuery(schemas.adminQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
     
@@ -119,7 +121,7 @@ router.get('/report/recent', async (req: Request, res: Response, next: NextFunct
 });
 
 // PUT /api/report/:reportId/resolve - Mark report as resolved (admin endpoint)
-router.put('/report/:reportId/resolve', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/report/:reportId/resolve', adminRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { reportId } = req.params;
 
@@ -144,7 +146,7 @@ router.put('/report/:reportId/resolve', async (req: Request, res: Response, next
 });
 
 // GET /api/report/user/:socketId/analysis - Get pattern analysis for a user (admin endpoint)
-router.get('/report/user/:socketId/analysis', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/report/user/:socketId/analysis', adminRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { socketId } = req.params;
 
@@ -166,7 +168,7 @@ router.get('/report/user/:socketId/analysis', async (req: Request, res: Response
 });
 
 // GET /api/report/restrictions/active - Get all active restrictions (admin endpoint)
-router.get('/report/restrictions/active', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/report/restrictions/active', adminRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { patternDetectionService } = await import('../services/patternDetectionService');
     const restrictions = await patternDetectionService.getActiveRestrictions();
@@ -182,7 +184,7 @@ router.get('/report/restrictions/active', async (req: Request, res: Response, ne
 });
 
 // POST /api/report/restrictions/cleanup - Clean up expired restrictions (admin endpoint)
-router.post('/report/restrictions/cleanup', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/report/restrictions/cleanup', adminRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const cleanedCount = await reportService.cleanupExpiredRestrictions();
 

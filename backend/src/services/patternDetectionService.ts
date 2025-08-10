@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { database } from '../config/database';
+import { pooledDatabase } from '../config/connectionPool';
 import { 
   UserPattern, 
   UserRestriction, 
@@ -36,7 +36,7 @@ class PatternDetectionService {
       pattern.reportedAt.toISOString()
     ];
 
-    await database.run(sql, params);
+    await pooledDatabase.run(sql, params);
     return pattern;
   }
 
@@ -148,7 +148,7 @@ class PatternDetectionService {
       ORDER BY reported_at DESC
     `;
 
-    const rows = await database.all<any>(sql, [socketId]);
+    const rows = await pooledDatabase.all<any>(sql, [socketId]);
     
     return rows.map(row => ({
       ...row,
@@ -192,7 +192,7 @@ class PatternDetectionService {
       restriction.isActive ? 1 : 0
     ];
 
-    await database.run(sql, params);
+    await pooledDatabase.run(sql, params);
     return restriction;
   }
 
@@ -209,7 +209,7 @@ class PatternDetectionService {
       LIMIT 1
     `;
 
-    const row = await database.get<any>(sql, [socketId]);
+    const row = await pooledDatabase.get<any>(sql, [socketId]);
     
     if (!row) {
       return null;
@@ -236,7 +236,7 @@ class PatternDetectionService {
    */
   async deactivateRestriction(restrictionId: string): Promise<boolean> {
     const sql = 'UPDATE user_restrictions SET is_active = 0 WHERE id = ?';
-    const result = await database.run(sql, [restrictionId]);
+    const result = await pooledDatabase.run(sql, [restrictionId]);
     return result.changes > 0;
   }
 
@@ -245,7 +245,7 @@ class PatternDetectionService {
    */
   async deactivateUserRestrictions(socketId: string): Promise<number> {
     const sql = 'UPDATE user_restrictions SET is_active = 0 WHERE socket_id = ? AND is_active = 1';
-    const result = await database.run(sql, [socketId]);
+    const result = await pooledDatabase.run(sql, [socketId]);
     return result.changes;
   }
 
@@ -309,19 +309,19 @@ class PatternDetectionService {
     averageReportsBeforeRestriction: number;
   }> {
     // Total restrictions
-    const totalResult = await database.get<{ count: number }>(
+    const totalResult = await pooledDatabase.get<{ count: number }>(
       'SELECT COUNT(*) as count FROM user_restrictions'
     );
     const totalRestrictions = totalResult?.count || 0;
 
     // Active restrictions
-    const activeResult = await database.get<{ count: number }>(
+    const activeResult = await pooledDatabase.get<{ count: number }>(
       'SELECT COUNT(*) as count FROM user_restrictions WHERE is_active = 1'
     );
     const activeRestrictions = activeResult?.count || 0;
 
     // Restrictions by type
-    const typeResults = await database.all<{ restriction_type: string; count: number }>(
+    const typeResults = await pooledDatabase.all<{ restriction_type: string; count: number }>(
       'SELECT restriction_type, COUNT(*) as count FROM user_restrictions GROUP BY restriction_type'
     );
     const restrictionsByType: Record<string, number> = {};
@@ -330,7 +330,7 @@ class PatternDetectionService {
     });
 
     // Average reports before restriction
-    const avgResult = await database.get<{ avg: number }>(
+    const avgResult = await pooledDatabase.get<{ avg: number }>(
       'SELECT AVG(report_count) as avg FROM user_restrictions'
     );
     const averageReportsBeforeRestriction = Math.round(avgResult?.avg || 0);
@@ -355,7 +355,7 @@ class PatternDetectionService {
         AND end_time <= datetime('now')
     `;
     
-    const result = await database.run(sql);
+    const result = await pooledDatabase.run(sql);
     return result.changes;
   }
 
@@ -371,7 +371,7 @@ class PatternDetectionService {
       LIMIT ?
     `;
 
-    const rows = await database.all<any>(sql, [limit]);
+    const rows = await pooledDatabase.all<any>(sql, [limit]);
     
     return rows.map(row => ({
       ...row,
@@ -391,7 +391,7 @@ class PatternDetectionService {
       ORDER BY start_time DESC
     `;
 
-    const rows = await database.all<any>(sql);
+    const rows = await pooledDatabase.all<any>(sql);
     
     return rows.map(row => ({
       ...row,
