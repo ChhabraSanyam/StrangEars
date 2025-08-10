@@ -96,6 +96,7 @@ Thumbs.db
 *.temp
 
 # Database files
+data/
 *.sqlite
 *.db
 
