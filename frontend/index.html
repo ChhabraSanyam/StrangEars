@@ -18,9 +18,15 @@
           const viewport = document.getElementById('viewport-meta');
           const screenWidth = window.screen.width;
           
-          // Calculate appropriate desktop width and scale for centering and larger size
-          const desktopWidth = Math.max(screenWidth / 1.2, 500); // Further reduced min width and increased target scale
-          const scale = Math.min(screenWidth / desktopWidth, 1.2); // Cap at 1.2 for much larger content
+          // Calculate appropriate desktop width and scale for centering and fitting
+          const screenHeight = window.screen.height;
+          const desktopWidth = Math.max(screenWidth / 1.0, 600); // Adjusted for better fit
+          const desktopHeight = 800; // Approximate desktop height
+          
+          // Calculate scale based on both width and height to ensure content fits
+          const scaleWidth = screenWidth / desktopWidth;
+          const scaleHeight = screenHeight / desktopHeight;
+          const scale = Math.min(scaleWidth, scaleHeight, 1.0); // Cap at 1.0 to prevent overflow
           
           viewport.setAttribute('content', 
             `width=${desktopWidth}, initial-scale=${scale}, minimum-scale=0.3, maximum-scale=2.0, user-scalable=yes`

@@ -12,6 +12,8 @@ dotenv.config();
 import apiRoutes from './routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { SocketService } from './services/socketService';
+// Import database to ensure schema initialization
+import { database } from './config/database';
 
 // Configure allowed origins for CORS
 const getAllowedOrigins = () => {
@@ -67,8 +69,15 @@ app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 5001;
+
+// Ensure database is initialized before starting server
+console.log('Initializing database...');
+// The database singleton is already created by the import above
+// This will trigger the constructor and create all tables
+
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Database initialization completed');
 });
 
 export { app, server, io, socketService };
