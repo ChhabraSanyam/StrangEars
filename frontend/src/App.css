@@ -13,6 +13,23 @@
 body {
   font-family: "Inter", sans-serif;
   overflow: hidden;
+  /* Improve touch handling on mobile */
+  -webkit-overflow-scrolling: touch;
+  touch-action: manipulation;
+}
+
+/* Ensure proper touch handling for mobile navigation */
+@media (max-width: 768px) {
+  body {
+    /* Allow vertical scrolling on mobile when needed */
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  
+  /* Prevent pull-to-refresh on mobile browsers */
+  body {
+    overscroll-behavior-y: contain;
+  }
 }
 
 /* Screen reader only utility */
@@ -101,4 +118,75 @@ body {
 
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
+}
+
+/* Mobile touch improvements */
+.touch-pan-y {
+  touch-action: pan-y;
+}
+
+/* Improve button touch targets on mobile */
+@media (max-width: 768px) {
+  .action-button {
+    /* Ensure minimum touch target size */
+    min-height: 44px;
+    /* Improve touch responsiveness */
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  
+  /* Better touch feedback */
+  .action-button:active {
+    transform: translateY(-1px) scale(0.98);
+  }
+}
+
+/* Prevent text selection on touch devices for better UX */
+@media (pointer: coarse) {
+  .main-tagline,
+  .action-button {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Mobile viewport fixes */
+@media screen and (max-width: 768px) {
+  /* Fix viewport height issues on mobile browsers */
+  .h-screen {
+    height: 100vh;
+    height: 100dvh; /* Use dynamic viewport height when supported */
+  }
+  
+  /* Ensure proper scrolling behavior */
+  .overflow-hidden {
+    overflow: hidden;
+  }
+  
+  /* Allow scrolling in chat areas */
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}
+
+/* Improve touch responsiveness */
+@media (hover: none) and (pointer: coarse) {
+  /* Remove hover effects on touch devices */
+  .action-button:hover {
+    transform: none;
+    box-shadow: none;
+    width: auto;
+    padding: 0.75rem 2.5rem;
+    white-space: nowrap;
+    text-align: left;
+  }
+  
+  /* Add touch-specific active states */
+  .action-button:active {
+    transform: translateY(-1px) scale(0.98);
+    box-shadow: 0 4px 12px rgba(74, 93, 74, 0.2);
+  }
 }

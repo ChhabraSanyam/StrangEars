@@ -287,6 +287,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div 
           ref={messagesContainerRef}
           className="flex-1 overflow-y-auto px-6 py-4 scroll-smooth"
+          style={{
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-y'
+          }}
         >
           <div className="max-w-4xl mx-auto space-y-4">
             {/* Welcome Message */}
@@ -430,6 +434,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   rows={1}
                   maxLength={1000}
                   aria-label="Type your message"
+                  style={{
+                    touchAction: 'manipulation'
+                  }}
                 />
                 <div className="flex justify-between items-center mt-0.5">
                   <span className="font-inter text-xs text-slate-medium">

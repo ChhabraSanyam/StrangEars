@@ -104,13 +104,97 @@ function App() {
   }, [showButtons]);
 
   useEffect(() => {
+    // Touch handling for mobile devices
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let isScrolling = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      // Allow normal scrolling in chat interface and waiting room
+      if (currentView === "matched" || currentView === "waiting") {
+        return;
+      }
+
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = Date.now();
+      isScrolling = false;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      // Allow normal scrolling in chat interface and waiting room
+      if (currentView === "matched" || currentView === "waiting") {
+        return;
+      }
+
+      // Don't prevent scrolling if buttons are shown in form view
+      if (showButtons && currentView === "form") {
+        return;
+      }
+
+      // Check if this is a scroll gesture (fast movement)
+      const touchCurrentY = e.touches[0].clientY;
+      const deltaY = touchStartY - touchCurrentY;
+      const deltaTime = Date.now() - touchStartTime;
+      
+      // If movement is significant and fast enough, treat as navigation gesture
+      if (Math.abs(deltaY) > 50 && deltaTime < 300) {
+        e.preventDefault();
+        isScrolling = true;
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      // Allow normal scrolling in chat interface and waiting room
+      if (currentView === "matched" || currentView === "waiting") {
+        return;
+      }
+
+      if (!isScrolling) return;
+
+      // Don't allow navigation away from form view when buttons are shown
+      if (showButtons && currentView === "form") {
+        return;
+      }
+
+      const touchEndY = e.changedTouches[0].clientY;
+      const deltaY = touchStartY - touchEndY;
+      const deltaTime = Date.now() - touchStartTime;
+
+      // Only trigger navigation for significant, fast swipes
+      if (Math.abs(deltaY) > 50 && deltaTime < 300) {
+        if (deltaY > 0) {
+          // Swiping up (scrolling down)
+          if (currentView === "initial") {
+            setCurrentView("form");
+          } else if (currentView === "form" && !showButtons) {
+            setCurrentView("guidelines");
+          }
+        } else {
+          // Swiping down (scrolling up)
+          if (currentView === "guidelines") {
+            setCurrentView("form");
+          } else if (currentView === "form") {
+            setCurrentView("initial");
+          }
+        }
+      }
+    };
+
     const handleScroll = (e: WheelEvent) => {
       // Allow normal scrolling in chat interface and waiting room
       if (currentView === "matched" || currentView === "waiting") {
         return;
       }
 
-      e.preventDefault();
+      // Only prevent default on desktop (non-touch devices)
+      // This allows mobile devices to scroll normally
+      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      if (!isTouchDevice) {
+        e.preventDefault();
+      } else {
+        // On touch devices, allow normal scrolling
+        return;
+      }
 
       // Don't allow scrolling away from form view when buttons are shown
       if (showButtons && currentView === "form") {
@@ -134,8 +218,18 @@ function App() {
       }
     };
 
+    // Add event listeners
     window.addEventListener("wheel", handleScroll, { passive: false });
-    return () => window.removeEventListener("wheel", handleScroll);
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener("wheel", handleScroll);
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
   }, [currentView, showButtons]);
 
   const handleVentClick = async () => {
@@ -439,7 +533,15 @@ function App() {
   }
 
   return (
-    <div className="h-screen bg-sage relative overflow-hidden" role="main">
+    <div 
+      className="h-screen bg-sage relative overflow-hidden touch-pan-y" 
+      role="main"
+      style={{
+        // Ensure proper touch handling on mobile
+        WebkitOverflowScrolling: 'touch',
+        touchAction: currentView === "matched" || currentView === "waiting" ? 'auto' : 'pan-y'
+      }}
+    >
       {/* Skip Navigation Link */}
       <a
         href="#main-content"
