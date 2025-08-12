@@ -30,6 +30,7 @@ function App() {
   const [otherUserPhoto, setOtherUserPhoto] = useState<File | null>(null);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
 
+
   // Socket integration
   const {
     connect,
@@ -126,8 +127,8 @@ function App() {
         return;
       }
 
-      // Don't prevent scrolling if buttons are shown in form view
-      if (showButtons && currentView === "form") {
+      // Block all scrolling/navigation when buttons are shown
+      if (showButtons) {
         return;
       }
 
@@ -136,8 +137,8 @@ function App() {
       const deltaY = touchStartY - touchCurrentY;
       const deltaTime = Date.now() - touchStartTime;
       
-      // If movement is significant and fast enough, treat as navigation gesture
-      if (Math.abs(deltaY) > 50 && deltaTime < 300) {
+      // If movement is significant, treat as navigation gesture (more sensitive)
+      if (Math.abs(deltaY) > 30 && deltaTime < 500) {
         e.preventDefault();
         isScrolling = true;
       }
@@ -151,8 +152,8 @@ function App() {
 
       if (!isScrolling) return;
 
-      // Don't allow navigation away from form view when buttons are shown
-      if (showButtons && currentView === "form") {
+      // Don't allow navigation when buttons are shown
+      if (showButtons) {
         return;
       }
 
@@ -160,19 +161,19 @@ function App() {
       const deltaY = touchStartY - touchEndY;
       const deltaTime = Date.now() - touchStartTime;
 
-      // Only trigger navigation for significant, fast swipes
-      if (Math.abs(deltaY) > 50 && deltaTime < 300) {
+      // Only trigger navigation for significant swipes (more sensitive)
+      if (Math.abs(deltaY) > 30 && deltaTime < 500) {
         if (deltaY > 0) {
           // Swiping up (scrolling down)
           if (currentView === "initial") {
-            setCurrentView("form");
+            setCurrentView("guidelines"); // Go directly to guidelines (shows form + guidelines)
           } else if (currentView === "form" && !showButtons) {
             setCurrentView("guidelines");
           }
         } else {
           // Swiping down (scrolling up)
           if (currentView === "guidelines") {
-            setCurrentView("form");
+            setCurrentView("initial"); // Go directly back to initial from guidelines
           } else if (currentView === "form") {
             setCurrentView("initial");
           }
@@ -196,22 +197,22 @@ function App() {
         return;
       }
 
-      // Don't allow scrolling away from form view when buttons are shown
-      if (showButtons && currentView === "form") {
+      // Don't allow scrolling when buttons are shown
+      if (showButtons) {
         return;
       }
 
       if (e.deltaY > 0) {
         // Scrolling down
         if (currentView === "initial") {
-          setCurrentView("form");
+          setCurrentView("guidelines"); // Go directly to guidelines (shows form + guidelines)
         } else if (currentView === "form" && !showButtons) {
           setCurrentView("guidelines");
         }
       } else {
         // Scrolling up
         if (currentView === "guidelines") {
-          setCurrentView("form");
+          setCurrentView("initial"); // Go directly back to initial from guidelines
         } else if (currentView === "form") {
           setCurrentView("initial");
         }
@@ -495,6 +496,8 @@ function App() {
   };
 
 
+
+
   // Show waiting room if in waiting state
   if (currentView === 'waiting' && matchingData.userType && matchingData.estimatedWaitTime !== undefined) {
     return (
@@ -616,7 +619,7 @@ function App() {
             <img
               src="/assets/chat-bubble.webp"
               alt="Chat Bubble"
-              className="absolute -top-6 -right-10 h-14 w-auto opacity-60 md:h-10 md:-right-7 md:-top-4 xs:h-8 xs:-right-6 xs:-top-3"
+              className="absolute -top-6 -right-10 h-14 w-auto opacity-50 md:h-10 md:-right-7 md:-top-4 xs:h-8 xs:-right-6 xs:-top-3"
             />
           </h2>
           <p
@@ -789,6 +792,7 @@ function App() {
                 className={`action-button vent-button ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onMouseEnter={() => setHoveredButton("vent")}
                 onMouseLeave={() => setHoveredButton(null)}
+
                 disabled={connectionStatus !== 'connected'}
                 aria-label="Choose to vent - talk to someone who will listen with empathy"
                 aria-describedby="vent-description"
@@ -806,6 +810,7 @@ function App() {
                 className={`action-button listen-button ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onMouseEnter={() => setHoveredButton("listen")}
                 onMouseLeave={() => setHoveredButton(null)}
+
                 disabled={connectionStatus !== 'connected'}
                 aria-label="Choose to listen - help others feel heard and understood"
                 aria-describedby="listen-description"

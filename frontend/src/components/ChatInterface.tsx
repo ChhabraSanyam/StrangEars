@@ -76,6 +76,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     previousMessagesLength.current = messages.length;
   }, [messages, userRole, isAtBottom]);
 
+  // Auto-scroll when typing indicator appears/disappears if user is at bottom
+  useEffect(() => {
+    if (isAtBottom && messagesEndRef.current) {
+      // Small delay to ensure DOM has updated with typing indicator
+      setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 50);
+    }
+  }, [isOtherUserTyping, isAtBottom]);
+
   // Handle scroll events to detect if user is at bottom and show/hide scroll to bottom button
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -374,8 +386,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             )}
 
-            {/* Scroll anchor */}
-            <div ref={messagesEndRef} />
+            {/* Scroll anchor with padding to ensure typing indicator is fully visible */}
+            <div ref={messagesEndRef} className="pb-4" />
           </div>
         </div>
 
@@ -430,12 +442,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       : "Waiting for connection..."
                   }
                   disabled={connectionStatus !== 'connected' || !otherUserConnected}
-                  className="w-full h-12 px-4 py-3 border-2 border-gray-border rounded-lg resize-none font-young-serif text-slate-dark placeholder:text-gray-placeholder focus:border-slate-dark focus:outline-none focus:ring-2 focus:ring-slate-dark focus:ring-opacity-20 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors duration-200"
+                  className="message-input-no-scroll w-full h-12 px-4 py-3 border-2 border-gray-border rounded-lg resize-none font-young-serif text-slate-dark placeholder:text-gray-placeholder focus:border-slate-dark focus:outline-none focus:ring-2 focus:ring-slate-dark focus:ring-opacity-20 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors duration-200"
                   rows={1}
                   maxLength={1000}
                   aria-label="Type your message"
                   style={{
-                    touchAction: 'manipulation'
+                    touchAction: 'manipulation',
+                    overflowY: 'auto',
+                    overflowX: 'hidden'
                   }}
                 />
                 <div className="flex justify-between items-center mt-0.5">

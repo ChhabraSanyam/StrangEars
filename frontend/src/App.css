@@ -190,3 +190,36 @@ body {
     box-shadow: 0 4px 12px rgba(74, 93, 74, 0.2);
   }
 }
+
+/* Hide scrollbar on message input textarea only on mobile when not needed */
+@media (max-width: 768px) {
+  .message-input-no-scroll::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+  }
+  
+  .message-input-no-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+}
+
+/* On desktop, show a thin scrollbar when needed */
+@media (min-width: 769px) {
+  .message-input-no-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  .message-input-no-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .message-input-no-scroll::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
+  }
+  
+  .message-input-no-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.4);
+  }
+}

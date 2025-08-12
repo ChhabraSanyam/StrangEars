@@ -3,11 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.webp" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" id="viewport-meta" />
     <title>StrangEars - Hear. Vent. Connect.</title>
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Mobile optimization - render desktop layout at larger scale
+      (function() {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                         (window.innerWidth <= 768 && 'ontouchstart' in window);
+        
+        if (isMobile) {
+          const viewport = document.getElementById('viewport-meta');
+          const screenWidth = window.screen.width;
+          
+          // Calculate appropriate desktop width and scale for centering and larger size
+          const desktopWidth = Math.max(screenWidth / 1.2, 500); // Further reduced min width and increased target scale
+          const scale = Math.min(screenWidth / desktopWidth, 1.2); // Cap at 1.2 for much larger content
+          
+          viewport.setAttribute('content', 
+            `width=${desktopWidth}, initial-scale=${scale}, minimum-scale=0.3, maximum-scale=2.0, user-scalable=yes`
+          );
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
