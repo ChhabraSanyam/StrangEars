@@ -29,6 +29,9 @@ function App() {
   const [otherUserName, setOtherUserName] = useState<string | undefined>(undefined);
   const [otherUserPhoto, setOtherUserPhoto] = useState<File | null>(null);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+  
+  // Detect if device supports hover (desktop) vs touch-only (mobile)
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 
   // Socket integration
@@ -789,9 +792,9 @@ function App() {
             <div className="flex justify-between w-full max-w-[800px] md:max-w-[500px] xs:max-w-[500px] mx-auto relative h-auto min-h-[60px]">
               <button
                 onClick={handleVentClick}
-                className={`action-button vent-button ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onMouseEnter={() => setHoveredButton("vent")}
-                onMouseLeave={() => setHoveredButton(null)}
+                className={`action-button vent-button ${hoveredButton === "vent" ? 'text-expanded' : ''} ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onMouseEnter={() => !isTouchDevice && setHoveredButton("vent")}
+                onMouseLeave={() => !isTouchDevice && setHoveredButton(null)}
 
                 disabled={connectionStatus !== 'connected'}
                 aria-label="Choose to vent - talk to someone who will listen with empathy"
@@ -807,9 +810,9 @@ function App() {
 
               <button
                 onClick={handleListenClick}
-                className={`action-button listen-button ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onMouseEnter={() => setHoveredButton("listen")}
-                onMouseLeave={() => setHoveredButton(null)}
+                className={`action-button listen-button ${hoveredButton === "listen" ? 'text-expanded' : ''} ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onMouseEnter={() => !isTouchDevice && setHoveredButton("listen")}
+                onMouseLeave={() => !isTouchDevice && setHoveredButton(null)}
 
                 disabled={connectionStatus !== 'connected'}
                 aria-label="Choose to listen - help others feel heard and understood"

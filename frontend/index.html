@@ -16,21 +16,35 @@
         
         if (isMobile) {
           const viewport = document.getElementById('viewport-meta');
-          const screenWidth = window.screen.width;
+
           
-          // Calculate appropriate desktop width and scale for centering and fitting
-          const screenHeight = window.screen.height;
-          const desktopWidth = Math.max(screenWidth / 1.0, 600); // Adjusted for better fit
-          const desktopHeight = 800; // Approximate desktop height
+          // Calculate appropriate desktop width and scale accounting for browser UI
+          // Use viewport dimensions instead of screen dimensions to account for URL bar, etc.
+          const viewportWidth = window.innerWidth;
+          const viewportHeight = window.innerHeight;
+          const desktopWidth = Math.max(viewportWidth / 1.1, 500); // Increased scaling for larger content
+          const desktopHeight = 700; // Reduced desktop height assumption for better fit
           
-          // Calculate scale based on both width and height to ensure content fits
-          const scaleWidth = screenWidth / desktopWidth;
-          const scaleHeight = screenHeight / desktopHeight;
-          const scale = Math.min(scaleWidth, scaleHeight, 1.0); // Cap at 1.0 to prevent overflow
+          // Calculate scale based on both dimensions to ensure content fits completely
+          const scaleWidth = viewportWidth / desktopWidth;
+          const scaleHeight = viewportHeight / desktopHeight;
+          const scale = Math.min(scaleWidth, scaleHeight, 1.1); // Increased cap to 1.1 for larger content
           
           viewport.setAttribute('content', 
             `width=${desktopWidth}, initial-scale=${scale}, minimum-scale=0.3, maximum-scale=2.0, user-scalable=yes`
           );
+          
+          // Handle viewport height changes when mobile browser UI shows/hides
+          const updateViewportHeight = () => {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+          };
+          
+          updateViewportHeight();
+          window.addEventListener('resize', updateViewportHeight);
+          window.addEventListener('orientationchange', () => {
+            setTimeout(updateViewportHeight, 100);
+          });
         }
       })();
     </script>
