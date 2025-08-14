@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { pooledDatabase } from '../config/connectionPool';
+import { database } from '../config/database';
 import { Report, CreateReportData, ReportStats } from '../models/Report';
 import { patternDetectionService } from './patternDetectionService';
 import { UserRestriction, PatternAnalysis } from '../models/UserPattern';
@@ -36,7 +36,7 @@ class ReportService {
       report.resolved ? 1 : 0
     ];
 
-    await pooledDatabase.run(sql, params);
+    await database.run(sql, params);
 
     // Process pattern detection if we have the reported user's socket ID
     let restriction: UserRestriction | undefined;
@@ -94,7 +94,7 @@ class ReportService {
       ORDER BY timestamp DESC
     `;
 
-    const rows = await pooledDatabase.all<any>(sql, [sessionId]);
+    const rows = await database.all<any>(sql, [sessionId]);
     
     return rows.map(row => ({
       ...row,
@@ -108,29 +108,29 @@ class ReportService {
    */
   async getReportStats(): Promise<ReportStats> {
     // Total reports
-    const totalResult = await pooledDatabase.get<{ count: number }>(
+    const totalResult = await database.get<{ count: number }>(
       'SELECT COUNT(*) as count FROM reports'
     );
     const totalReports = totalResult?.count || 0;
 
     // Reports today
-    const todayResult = await pooledDatabase.get<{ count: number }>(
+    const todayResult = await database.get<{ count: number }>(
       `SELECT COUNT(*) as count FROM reports 
        WHERE DATE(timestamp) = DATE('now')`
     );
     const reportsToday = todayResult?.count || 0;
 
     // Unresolved reports
-    const unresolvedResult = await pooledDatabase.get<{ count: number }>(
+    const unresolvedResult = await database.get<{ count: number }>(
       'SELECT COUNT(*) as count FROM reports WHERE resolved = 0'
     );
     const unresolvedReports = unresolvedResult?.count || 0;
 
     // Reports by type
-    const venterResult = await pooledDatabase.get<{ count: number }>(
+    const venterResult = await database.get<{ count: number }>(
       "SELECT COUNT(*) as count FROM reports WHERE reporter_type = 'venter'"
     );
-    const listenerResult = await pooledDatabase.get<{ count: number }>(
+    const listenerResult = await database.get<{ count: number }>(
       "SELECT COUNT(*) as count FROM reports WHERE reporter_type = 'listener'"
     );
 
@@ -150,7 +150,7 @@ class ReportService {
    */
   async resolveReport(reportId: string): Promise<boolean> {
     const sql = 'UPDATE reports SET resolved = 1 WHERE id = ?';
-    const result = await pooledDatabase.run(sql, [reportId]);
+    const result = await database.run(sql, [reportId]);
     return result.changes > 0;
   }
 
@@ -166,7 +166,7 @@ class ReportService {
       LIMIT ?
     `;
 
-    const rows = await pooledDatabase.all<any>(sql, [limit]);
+    const rows = await database.all<any>(sql, [limit]);
     
     return rows.map(row => ({
       ...row,
@@ -179,7 +179,7 @@ class ReportService {
    * Check if a session has been reported before
    */
   async hasSessionBeenReported(sessionId: string): Promise<boolean> {
-    const result = await pooledDatabase.get<{ count: number }>(
+    const result = await database.get<{ count: number }>(
       'SELECT COUNT(*) as count FROM reports WHERE session_id = ?',
       [sessionId]
     );

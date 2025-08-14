@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "nodemon --exec tsx src/index.ts",
-    "build": "tsc"
+    "build": "npm run clean && tsc",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -20,7 +21,6 @@
     "ioredis": "^5.4.1",
     "joi": "^18.0.0",
     "socket.io": "^4.8.1",
-    "sqlite3": "^5.1.7",
     "pg": "^8.11.3",
     "uuid": "^11.0.3",
     "@types/cors": "^2.8.17",
