@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
-import { Message } from '../types/chat';
-
-
+import { useState, useEffect, useRef } from "react";
+import { Message } from "../types/chat";
 
 interface ChatInterfaceProps {
   sessionId: string;
-  userRole: 'venter' | 'listener';
+  userRole: "venter" | "listener";
   messages: Message[];
   onSendMessage: (content: string) => void;
   onEndChat: () => void;
   onReport: () => void;
-  connectionStatus: 'connected' | 'connecting' | 'disconnected' | 'reconnecting';
+  connectionStatus:
+    | "connected"
+    | "connecting"
+    | "disconnected"
+    | "reconnecting";
   otherUserConnected: boolean;
   otherUserName?: string;
   currentUserName?: string;
@@ -34,9 +36,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   currentUserPhoto,
   otherUserPhoto,
   isOtherUserTyping = false,
-  onTypingChange
+  onTypingChange,
 }) => {
-  const [messageInput, setMessageInput] = useState('');
+  const [messageInput, setMessageInput] = useState("");
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const typingTimeoutRef = useRef<number | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -53,26 +55,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   useEffect(() => {
     const hasNewMessage = messages.length > previousMessagesLength.current;
     const lastMessage = messages[messages.length - 1];
-    const isNewMessageFromOther = lastMessage && lastMessage.sender !== userRole;
-    
+    const isNewMessageFromOther =
+      lastMessage && lastMessage.sender !== userRole;
+
     // Track when other user sends a new message
     if (hasNewMessage && isNewMessageFromOther) {
       setHasNewMessageFromOther(true);
       // Only increment unread count if user is not at bottom
       if (!isAtBottom) {
-        setUnreadCount(prev => prev + 1);
+        setUnreadCount((prev) => prev + 1);
       }
     }
-    
-    if (hasNewMessage && isNewMessageFromOther && isAtBottom && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+
+    if (
+      hasNewMessage &&
+      isNewMessageFromOther &&
+      isAtBottom &&
+      messagesEndRef.current
+    ) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-    
+
     // Always scroll to bottom for user's own messages
-    if (hasNewMessage && lastMessage && lastMessage.sender === userRole && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (
+      hasNewMessage &&
+      lastMessage &&
+      lastMessage.sender === userRole &&
+      messagesEndRef.current
+    ) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-    
+
     previousMessagesLength.current = messages.length;
   }, [messages, userRole, isAtBottom]);
 
@@ -82,7 +95,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Small delay to ensure DOM has updated with typing indicator
       setTimeout(() => {
         if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+          messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
         }
       }, 50);
     }
@@ -96,14 +109,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
       const atBottom = scrollHeight - scrollTop - clientHeight < 50; // 50px threshold
-      
+
       setIsAtBottom(atBottom);
-      
+
       // Show scroll to bottom button if:
       // 1. User is not at bottom AND
       // 2. There are messages
       setShowScrollToBottom(!atBottom && messages.length > 0);
-      
+
       // Reset the flag and unread count when user scrolls to bottom
       if (atBottom) {
         setHasNewMessageFromOther(false);
@@ -111,13 +124,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     };
 
-    container.addEventListener('scroll', handleScroll);
-    
+    container.addEventListener("scroll", handleScroll);
+
     // Initial check
     handleScroll();
 
     return () => {
-      container.removeEventListener('scroll', handleScroll);
+      container.removeEventListener("scroll", handleScroll);
     };
   }, [messages.length, hasNewMessageFromOther]);
 
@@ -137,10 +150,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleSendMessage = () => {
     const trimmedMessage = messageInput.trim();
-    if (trimmedMessage && connectionStatus === 'connected') {
+    if (trimmedMessage && connectionStatus === "connected") {
       onSendMessage(trimmedMessage);
-      setMessageInput('');
-      
+      setMessageInput("");
+
       // Clear typing status when message is sent
       if (onTypingChange) {
         onTypingChange(false);
@@ -153,7 +166,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -162,20 +175,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setMessageInput(value);
-    
+
     const isCurrentlyTyping = value.trim().length > 0;
-    
+
     // Handle typing status for other user
     if (onTypingChange) {
       if (isCurrentlyTyping) {
         // User is typing - send typing status
         onTypingChange(true);
-        
+
         // Clear existing timeout
         if (typingTimeoutRef.current) {
           clearTimeout(typingTimeoutRef.current);
         }
-        
+
         // Set timeout to stop typing status after 2 seconds of inactivity
         typingTimeoutRef.current = setTimeout(() => {
           onTypingChange(false);
@@ -192,52 +205,54 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const scrollToBottom = () => {
-    if (messagesEndRef.current && typeof messagesEndRef.current.scrollIntoView === 'function') {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (
+      messagesEndRef.current &&
+      typeof messagesEndRef.current.scrollIntoView === "function"
+    ) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
       // Reset the flag and unread count when user manually scrolls to bottom
       setHasNewMessageFromOther(false);
       setUnreadCount(0);
     }
   };
 
-
-
   const getUserDisplayName = (message: Message): string => {
     if (message.sender === userRole) {
-      return 'You';
+      return "You";
     }
     // Show the sender's name from the message data
-    return message.senderName || otherUserName || 'Anonymous';
+    return message.senderName || otherUserName || "Anonymous";
   };
 
   const getConnectionStatusMessage = (): string => {
-    if (connectionStatus === 'connecting') return 'Connecting...';
-    if (connectionStatus === 'reconnecting') return 'Reconnecting...';
-    if (connectionStatus === 'disconnected') return 'Connection lost';
-    if (!otherUserConnected) return 'Waiting for other user...';
-    return 'Connected';
+    if (connectionStatus === "connecting") return "Connecting...";
+    if (connectionStatus === "reconnecting") return "Reconnecting...";
+    if (connectionStatus === "disconnected") return "Connection lost";
+    if (!otherUserConnected) return "Waiting for other user...";
+    return "Connected";
   };
 
   const getConnectionStatusColor = (): string => {
-    if (connectionStatus === 'connected' && otherUserConnected) return 'text-green-600';
-    if (connectionStatus === 'disconnected') return 'text-red-600';
-    return 'text-yellow-600';
+    if (connectionStatus === "connected" && otherUserConnected)
+      return "text-green-600";
+    if (connectionStatus === "disconnected") return "text-red-600";
+    return "text-yellow-600";
   };
 
   return (
-    <div 
+    <div
       className="chat-interface h-screen bg-sage flex flex-col relative"
       style={{
-        backgroundImage: 'url(/assets/leaf-bg.webp)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
+        backgroundImage: "url(/assets/leaf-bg.webp)",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "scroll",
       }}
     >
       {/* Background overlay for better readability */}
       <div className="absolute inset-0 bg-sage bg-opacity-20 pointer-events-none"></div>
-      
+
       {/* Header */}
       <header className="bg-white bg-opacity-80 backdrop-blur-sm border-b border-gray-border px-6 py-4 flex-shrink-0 relative z-10">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
@@ -249,9 +264,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               className="h-8 w-auto mr-2"
             />
             <div>
-              <h1 className="font-prata text-xl text-slate-dark">
-                StrangEars
-              </h1>
+              <h1 className="font-prata text-xl text-slate-dark">StrangEars</h1>
               <p className="font-inter text-sm text-slate-medium">
                 Session: {sessionId.substring(0, 8)}...
               </p>
@@ -261,11 +274,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {/* Connection Status */}
           <div className="flex items-center space-x-4">
             <div className="text-right">
-              <p className={`font-inter text-sm font-medium ${getConnectionStatusColor()}`}>
+              <p
+                className={`font-inter text-sm font-medium ${getConnectionStatusColor()}`}
+              >
                 {getConnectionStatusMessage()}
               </p>
               <p className="font-inter text-xs text-slate-medium">
-                You are: {currentUserName || (userRole === 'venter' ? 'Stranger 1' : 'Stranger 2')}
+                You are:{" "}
+                {currentUserName ||
+                  (userRole === "venter" ? "Stranger 1" : "Stranger 2")}
               </p>
             </div>
 
@@ -296,12 +313,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Messages Area */}
       <main className="flex-1 overflow-hidden flex flex-col relative z-10">
-        <div 
+        <div
           ref={messagesContainerRef}
           className="flex-1 overflow-y-auto px-6 py-4 scroll-smooth"
           style={{
-            WebkitOverflowScrolling: 'touch',
-            touchAction: 'pan-y'
+            WebkitOverflowScrolling: "touch",
+            touchAction: "pan-y",
           }}
         >
           <div className="max-w-4xl mx-auto space-y-4">
@@ -313,10 +330,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     Welcome to your anonymous chat
                   </h2>
                   <p className="font-young-serif text-slate-medium">
-                    {userRole === 'venter' 
+                    {userRole === "venter"
                       ? "Feel free to share what's on your mind. Your listener is here to support you."
-                      : "Thank you for being here to listen. Let them know you're ready to hear what they have to say."
-                    }
+                      : "Thank you for being here to listen. Let them know you're ready to hear what they have to say."}
                   </p>
                   <p className="font-ysabeau text-sm text-slate-medium mt-3 italic">
                     Remember: Stay anonymous and be respectful. 💚
@@ -328,12 +344,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             {/* Messages */}
             {messages.map((message) => {
               const isOwnMessage = message.sender === userRole;
-              const userPhoto = isOwnMessage ? currentUserPhoto : otherUserPhoto;
-              
+              const userPhoto = isOwnMessage
+                ? currentUserPhoto
+                : otherUserPhoto;
+
               return (
                 <div
                   key={message.id}
-                  className={`flex w-full ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                  className={`flex w-full ${
+                    isOwnMessage ? "justify-end" : "justify-start"
+                  }`}
                 >
                   <div className="flex items-start gap-3 max-w-[75%] min-w-0">
                     {/* Profile Picture - Always on the left */}
@@ -347,24 +367,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       ) : (
                         <div className="w-8 h-8 rounded-full bg-slate-medium bg-opacity-20 flex items-center justify-center">
                           <span className="text-slate-medium text-xs font-medium">
-                            {getUserDisplayName(message).charAt(0).toUpperCase()}
+                            {getUserDisplayName(message)
+                              .charAt(0)
+                              .toUpperCase()}
                           </span>
                         </div>
                       )}
                     </div>
-                    
+
                     {/* Message Bubble */}
                     <div
                       className={`px-4 pt-2 pb-3 rounded-lg min-w-0 flex-1 ${
                         isOwnMessage
-                          ? 'bg-sage-dark text-white'
-                          : 'bg-white bg-opacity-80 text-slate-dark'
+                          ? "bg-sage-dark text-white"
+                          : "bg-white bg-opacity-80 text-slate-dark"
                       } backdrop-blur-sm shadow-sm`}
                     >
                       <div className="mb-2">
-                        <span className={`font-inter text-xs font-medium ${
-                          isOwnMessage ? 'text-white text-opacity-80' : 'text-slate-medium'
-                        }`}>
+                        <span
+                          className={`font-inter text-xs font-medium ${
+                            isOwnMessage
+                              ? "text-white text-opacity-80"
+                              : "text-slate-medium"
+                          }`}
+                        >
                           {getUserDisplayName(message)}
                         </span>
                       </div>
@@ -381,7 +407,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             {isOtherUserTyping && (
               <div className="flex justify-start">
                 <div className="bg-white bg-opacity-40 text-slate-medium px-3 py-1.5 rounded-lg backdrop-blur-sm shadow-sm">
-                  <span className="font-inter text-xs italic opacity-80">Typing...</span>
+                  <span className="font-inter text-xs italic opacity-80">
+                    Typing...
+                  </span>
                 </div>
               </div>
             )}
@@ -398,15 +426,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               {/* Unread count notification bubble */}
               {unreadCount > 0 && (
                 <div className="absolute -top-1 -right-1 bg-sage-dark text-white text-[10px] font-medium rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-lg animate-fade-in z-20">
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                  {unreadCount > 99 ? "99+" : unreadCount}
                 </div>
               )}
-              
+
               <button
                 onClick={scrollToBottom}
                 className="bg-sage-dark bg-opacity-70 hover:bg-sage-darker hover:bg-opacity-80 text-white p-2 rounded-full shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-2 animate-fade-in backdrop-blur-sm"
-                aria-label={unreadCount > 0 ? `${unreadCount} new messages - Scroll to bottom` : "Scroll to bottom of conversation"}
-                title={unreadCount > 0 ? `${unreadCount} new messages - Scroll to bottom` : "Scroll to bottom"}
+                aria-label={
+                  unreadCount > 0
+                    ? `${unreadCount} new messages - Scroll to bottom`
+                    : "Scroll to bottom of conversation"
+                }
+                title={
+                  unreadCount > 0
+                    ? `${unreadCount} new messages - Scroll to bottom`
+                    : "Scroll to bottom"
+                }
               >
                 <svg
                   width="20"
@@ -417,9 +453,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={hasNewMessageFromOther ? 'animate-bounce-gentle' : ''}
+                  className={
+                    hasNewMessageFromOther ? "animate-bounce-gentle" : ""
+                  }
                 >
-                  <path d="m6 9 6 6 6-6"/>
+                  <path d="m6 9 6 6 6-6" />
                 </svg>
               </button>
             </div>
@@ -437,26 +475,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
                   placeholder={
-                    connectionStatus === 'connected' && otherUserConnected
+                    connectionStatus === "connected" && otherUserConnected
                       ? "Type your message... "
                       : "Waiting for connection..."
                   }
-                  disabled={connectionStatus !== 'connected' || !otherUserConnected}
+                  disabled={
+                    connectionStatus !== "connected" || !otherUserConnected
+                  }
                   className="message-input-no-scroll w-full h-12 px-4 py-3 border-2 border-gray-border rounded-lg resize-none font-young-serif text-slate-dark placeholder:text-gray-placeholder focus:border-slate-dark focus:outline-none focus:ring-2 focus:ring-slate-dark focus:ring-opacity-20 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors duration-200"
                   rows={1}
                   maxLength={1000}
                   aria-label="Type your message"
                   style={{
-                    touchAction: 'manipulation',
-                    overflowY: 'auto',
-                    overflowX: 'hidden'
+                    touchAction: "manipulation",
+                    overflowY: "auto",
+                    overflowX: "hidden",
                   }}
                 />
                 <div className="flex justify-between items-center mt-0.5">
                   <span className="font-inter text-xs text-slate-medium">
                     {messageInput.length}/1000 characters
                   </span>
-                  {connectionStatus !== 'connected' && (
+                  {connectionStatus !== "connected" && (
                     <span className="font-inter text-xs text-red-600">
                       Connection required to send messages
                     </span>
@@ -466,7 +506,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
               <button
                 onClick={handleSendMessage}
-                disabled={!messageInput.trim() || connectionStatus !== 'connected' || !otherUserConnected}
+                disabled={
+                  !messageInput.trim() ||
+                  connectionStatus !== "connected" ||
+                  !otherUserConnected
+                }
                 className="bg-sage-dark hover:bg-sage-darker disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 h-12 rounded-lg font-inter font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-sage-dark focus:ring-offset-2 mt-0"
                 aria-label="Send message"
               >
@@ -479,7 +523,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Live region for screen reader announcements */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {messages.length > 0 && `New message from ${getUserDisplayName(messages[messages.length - 1])}`}
+        {messages.length > 0 &&
+          `New message from ${getUserDisplayName(
+            messages[messages.length - 1]
+          )}`}
       </div>
     </div>
   );
