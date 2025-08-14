@@ -3,48 +3,43 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.webp" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" id="viewport-meta" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      id="viewport-meta"
+    />
     <title>StrangEars - Hear. Vent. Connect.</title>
   </head>
   <body>
     <div id="root"></div>
     <script>
       // Mobile optimization - render desktop layout at larger scale
-      (function() {
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-                         (window.innerWidth <= 768 && 'ontouchstart' in window);
-        
-        if (isMobile) {
-          const viewport = document.getElementById('viewport-meta');
+      (function () {
+        const isMobile =
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+            navigator.userAgent
+          ) ||
+          (window.innerWidth <= 768 && "ontouchstart" in window);
 
-          
+        if (isMobile) {
+          const viewport = document.getElementById("viewport-meta");
+
           // Calculate appropriate desktop width and scale accounting for browser UI
           // Use viewport dimensions instead of screen dimensions to account for URL bar, etc.
           const viewportWidth = window.innerWidth;
           const viewportHeight = window.innerHeight;
-          const desktopWidth = Math.max(viewportWidth / 1.1, 500); // Increased scaling for larger content
-          const desktopHeight = 700; // Reduced desktop height assumption for better fit
-          
+          const desktopWidth = Math.max(viewportWidth / 1.0, 500); // Reduced min width for larger content
+          const desktopHeight = 700; // Reduced height assumption for larger content
+
           // Calculate scale based on both dimensions to ensure content fits completely
           const scaleWidth = viewportWidth / desktopWidth;
           const scaleHeight = viewportHeight / desktopHeight;
-          const scale = Math.min(scaleWidth, scaleHeight, 1.1); // Increased cap to 1.1 for larger content
-          
-          viewport.setAttribute('content', 
+          const scale = Math.min(scaleWidth, scaleHeight, 1.0); // Cap at 1.0 to prevent overflow
+
+          viewport.setAttribute(
+            "content",
             `width=${desktopWidth}, initial-scale=${scale}, minimum-scale=0.3, maximum-scale=2.0, user-scalable=yes`
           );
-          
-          // Handle viewport height changes when mobile browser UI shows/hides
-          const updateViewportHeight = () => {
-            const vh = window.innerHeight * 0.01;
-            document.documentElement.style.setProperty('--vh', `${vh}px`);
-          };
-          
-          updateViewportHeight();
-          window.addEventListener('resize', updateViewportHeight);
-          window.addEventListener('orientationchange', () => {
-            setTimeout(updateViewportHeight, 100);
-          });
         }
       })();
     </script>

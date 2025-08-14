@@ -33,12 +33,6 @@ body {
 
 /* Ensure proper touch handling for mobile navigation */
 @media (max-width: 768px) {
-  body {
-    /* Allow vertical scrolling on mobile when needed */
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-  
   /* Prevent pull-to-refresh on mobile browsers */
   body {
     overscroll-behavior-y: contain;
