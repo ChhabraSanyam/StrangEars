@@ -75,7 +75,7 @@ const WaitingRoom: React.FC<WaitingRoomProps> = ({
   };
 
   return (
-    <div className="h-screen bg-sage relative overflow-hidden flex flex-col items-center justify-center">
+    <div className="waiting-room h-screen bg-sage relative overflow-hidden flex flex-col items-center justify-center">
       {/* Background Elements */}
       <div
         className="fixed -top-[25%] -left-[14%] w-[40%] h-[60%] bg-[url('/assets/bg-leaf.webp')] bg-contain bg-no-repeat opacity-70 z-1 -rotate-[70deg]"

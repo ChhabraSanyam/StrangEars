@@ -18,27 +18,6 @@ body {
   touch-action: manipulation;
 }
 
-/* Use custom viewport height that accounts for mobile browser UI */
-:root {
-  --vh: 1vh;
-}
-
-/* Apply custom viewport height on mobile */
-@media (max-width: 768px) {
-  .h-screen {
-    height: 100vh;
-    height: calc(var(--vh, 1vh) * 100);
-  }
-}
-
-/* Ensure proper touch handling for mobile navigation */
-@media (max-width: 768px) {
-  /* Prevent pull-to-refresh on mobile browsers */
-  body {
-    overscroll-behavior-y: contain;
-  }
-}
-
 /* Screen reader only utility */
 .sr-only {
   position: absolute;
@@ -164,23 +143,36 @@ body {
   }
 }
 
-/* Mobile viewport fixes */
+/* Use custom viewport height that accounts for mobile browser UI */
+:root {
+  --vh: 1vh;
+}
+
+/* Apply custom viewport height on mobile */
 @media screen and (max-width: 768px) {
-  /* Fix viewport height issues on mobile browsers */
-  .h-screen {
-    height: 100vh;
+  .h-screen,
+  .chat-interface,
+  .waiting-room {
+    height: 90vh;
+    height: calc(var(--vh, 1vh) * 90);
     height: 100dvh; /* Use dynamic viewport height when supported */
   }
-  
+}
+
+/* Ensure proper touch handling for mobile navigation */
+@media (max-width: 768px) {
   /* Ensure proper scrolling behavior */
   .overflow-hidden {
     overflow: hidden;
   }
-  
   /* Allow scrolling in chat areas */
   .overflow-y-auto {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+  }
+  /* Prevent pull-to-refresh on mobile browsers */
+  body {
+    overscroll-behavior-y: contain;
   }
 }
 

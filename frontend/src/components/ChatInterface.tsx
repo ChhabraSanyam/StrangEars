@@ -226,7 +226,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div 
-      className="h-screen bg-sage flex flex-col relative"
+      className="chat-interface h-screen bg-sage flex flex-col relative"
       style={{
         backgroundImage: 'url(/assets/leaf-bg.webp)',
         backgroundSize: 'cover',
