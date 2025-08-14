@@ -18,15 +18,6 @@ body {
   touch-action: manipulation;
 }
 
-/* Mobile body overflow handling */
-@media (max-width: 768px) {
-  /* Allow scrolling when chat interface is present */
-  body:has(.chat-interface) {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-  }
-}
-
 /* Screen reader only utility */
 .sr-only {
   position: absolute;
@@ -166,17 +157,13 @@ body {
     height: calc(var(--vh, 1vh) * 90);
     height: 100dvh; /* Use dynamic viewport height when supported */
   }
+
 }
 
 /* Ensure proper touch handling for mobile navigation */
 @media (max-width: 768px) {
-  /* Ensure proper scrolling behavior - keep main app overflow hidden */
-  .overflow-hidden:not(.chat-interface) {
-    overflow: hidden;
-  }
-  
-  /* Allow vertical scrolling in chat interface */
-  .chat-interface {
+  /* Allow scrolling when chat interface is present */
+  body:has(.chat-interface) {
     overflow-y: auto !important;
     overflow-x: hidden !important;
   }
@@ -186,7 +173,6 @@ body {
   .chat-interface {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
   }
   /* Prevent pull-to-refresh on mobile browsers */
   body {
