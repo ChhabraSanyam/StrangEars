@@ -99,9 +99,49 @@ class Database {
       for (const indexSql of indexes) {
         await this.pgPool.query(indexSql);
       }
+
+      // Perform startup cleanup
+      await this.performStartupCleanup();
     } catch (error) {
       console.error("Error initializing PostgreSQL tables:", error);
       throw error;
+    }
+  }
+
+  private async performStartupCleanup(): Promise<void> {
+    try {
+      // Deactivate expired restrictions
+      await this.pgPool.query(`
+        UPDATE user_restrictions 
+        SET is_active = false 
+        WHERE is_active = true 
+          AND end_time IS NOT NULL 
+          AND end_time <= CURRENT_TIMESTAMP
+      `);
+
+      // Delete old resolved reports (older than 60 days)
+      await this.pgPool.query(`
+        DELETE FROM reports 
+        WHERE resolved = true 
+          AND timestamp < CURRENT_TIMESTAMP - INTERVAL '60 days'
+      `);
+
+      // Delete old user patterns (older than 30 days)
+      await this.pgPool.query(`
+        DELETE FROM user_patterns 
+        WHERE reported_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+      `);
+
+      // Delete old inactive restrictions (older than 90 days)
+      await this.pgPool.query(`
+        DELETE FROM user_restrictions 
+        WHERE is_active = false 
+          AND start_time < CURRENT_TIMESTAMP - INTERVAL '90 days'
+      `);
+
+    } catch (error) {
+      console.error("Startup cleanup failed:", error);
+      // Don't throw - let the app continue even if cleanup fails
     }
   }
 
