@@ -189,7 +189,7 @@ class PatternDetectionService {
       restriction.endTime?.toISOString() || null,
       restriction.reason,
       restriction.reportCount,
-      restriction.isActive ? 1 : 0
+      restriction.isActive
     ];
 
     await database.run(sql, params);
@@ -204,7 +204,7 @@ class PatternDetectionService {
       SELECT id, socket_id as socketId, restriction_type as restrictionType,
              start_time as startTime, end_time as endTime, reason, report_count as reportCount, is_active as isActive
       FROM user_restrictions 
-      WHERE socket_id = ? AND is_active = 1
+      WHERE socket_id = ? AND is_active = true
       ORDER BY start_time DESC
       LIMIT 1
     `;
@@ -235,7 +235,7 @@ class PatternDetectionService {
    * Deactivate a specific restriction
    */
   async deactivateRestriction(restrictionId: string): Promise<boolean> {
-    const sql = 'UPDATE user_restrictions SET is_active = 0 WHERE id = ?';
+    const sql = 'UPDATE user_restrictions SET is_active = false WHERE id = ?';
     const result = await database.run(sql, [restrictionId]);
     return result.changes > 0;
   }
@@ -244,7 +244,7 @@ class PatternDetectionService {
    * Deactivate all active restrictions for a user
    */
   async deactivateUserRestrictions(socketId: string): Promise<number> {
-    const sql = 'UPDATE user_restrictions SET is_active = 0 WHERE socket_id = ? AND is_active = 1';
+    const sql = 'UPDATE user_restrictions SET is_active = false WHERE socket_id = ? AND is_active = true';
     const result = await database.run(sql, [socketId]);
     return result.changes;
   }
@@ -316,7 +316,7 @@ class PatternDetectionService {
 
     // Active restrictions
     const activeResult = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM user_restrictions WHERE is_active = 1'
+      'SELECT COUNT(*) as count FROM user_restrictions WHERE is_active = true'
     );
     const activeRestrictions = activeResult?.count || 0;
 
@@ -349,8 +349,8 @@ class PatternDetectionService {
   async cleanupExpiredRestrictions(): Promise<number> {
     const sql = `
       UPDATE user_restrictions 
-      SET is_active = 0 
-      WHERE is_active = 1 
+      SET is_active = false 
+      WHERE is_active = true 
         AND end_time IS NOT NULL 
         AND end_time <= CURRENT_TIMESTAMP
     `;
@@ -387,7 +387,7 @@ class PatternDetectionService {
       SELECT id, socket_id as socketId, restriction_type as restrictionType,
              start_time as startTime, end_time as endTime, reason, report_count as reportCount, is_active as isActive
       FROM user_restrictions 
-      WHERE is_active = 1
+      WHERE is_active = true
       ORDER BY start_time DESC
     `;
 

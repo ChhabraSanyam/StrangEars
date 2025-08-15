@@ -33,7 +33,7 @@ class ReportService {
       report.reporterType,
       report.reason,
       report.timestamp.toISOString(),
-      report.resolved ? 1 : 0
+      report.resolved
     ];
 
     await database.run(sql, params);
@@ -116,13 +116,13 @@ class ReportService {
     // Reports today
     const todayResult = await database.get<{ count: number }>(
       `SELECT COUNT(*) as count FROM reports 
-       WHERE DATE(timestamp) = DATE('now')`
+       WHERE DATE(timestamp) = CURRENT_DATE`
     );
     const reportsToday = todayResult?.count || 0;
 
     // Unresolved reports
     const unresolvedResult = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM reports WHERE resolved = 0'
+      'SELECT COUNT(*) as count FROM reports WHERE resolved = false'
     );
     const unresolvedReports = unresolvedResult?.count || 0;
 
@@ -149,7 +149,7 @@ class ReportService {
    * Mark a report as resolved
    */
   async resolveReport(reportId: string): Promise<boolean> {
-    const sql = 'UPDATE reports SET resolved = 1 WHERE id = ?';
+    const sql = 'UPDATE reports SET resolved = true WHERE id = ?';
     const result = await database.run(sql, [reportId]);
     return result.changes > 0;
   }
