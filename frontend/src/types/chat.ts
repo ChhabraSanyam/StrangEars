@@ -28,6 +28,14 @@ export interface ChatEventHandlers {
   onError: (error: string) => void;
   onMatchFound: (sessionId: string, userType: 'venter' | 'listener') => void;
   onUserTyping: (isTyping: boolean) => void;
+  onSessionRestored: (
+    sessionId: string, 
+    userType: 'venter' | 'listener', 
+    messages: Message[], 
+    otherUser?: { username?: string; profilePhoto?: string },
+    isOtherUserConnected?: boolean
+  ) => void;
+  onSessionNotFound: () => void;
 }
 
 export interface JoinSessionData {

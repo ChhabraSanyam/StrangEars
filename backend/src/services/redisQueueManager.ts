@@ -6,7 +6,7 @@ export class RedisQueueManager {
   private readonly VENTER_QUEUE_KEY = 'queue:venters';
   private readonly LISTENER_QUEUE_KEY = 'queue:listeners';
   private readonly QUEUE_ENTRY_PREFIX = 'queue_entry:';
-  private readonly QUEUE_TIMEOUT = 3 * 60; // 3 minutes in seconds (reduced for memory optimization)
+  private readonly QUEUE_TIMEOUT = 5 * 60; // 5 minutes in seconds (consistent with in-memory)
 
   /**
    * Add a user to the appropriate queue - memory optimized

@@ -49,6 +49,15 @@ router.post('/match', matchingRateLimit, validate(schemas.matchRequest), async (
       });
     }
   } catch (error) {
+    // Handle restriction errors
+    if (error instanceof Error && error.message.includes('restricted')) {
+      res.status(403).json({
+        error: 'User restricted',
+        message: error.message,
+        timestamp: new Date()
+      });
+      return;
+    }
     next(error);
   }
 });

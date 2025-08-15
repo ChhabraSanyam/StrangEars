@@ -19,18 +19,28 @@ class SocketService {
   private maxReconnectDelay = 30000; // Max 30 seconds
   private currentSessionId: string | null = null;
   private userRole: 'venter' | 'listener' | null = null;
+  
+  // Cold start detection and warmup handling
+  private coldStartDetected = false;
+  private isWarmingUp = false;
+  private connectionFailureCount = 0;
 
   constructor() {
+    // Restore session from localStorage if available
+    this.restoreSessionFromStorage();
     this.setupSocket();
   }
 
   private setupSocket(): void {
     const serverUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001';
     
+    // Use longer timeout for potential cold starts
+    const connectionTimeout = this.coldStartDetected ? 45000 : 20000; // 45s for cold start, 20s normal
+    
     this.socket = io(serverUrl, {
       autoConnect: false,
       reconnection: false, // We'll handle reconnection manually
-      timeout: 10000,
+      timeout: connectionTimeout,
       transports: ['websocket', 'polling']
     });
 
@@ -42,15 +52,37 @@ class SocketService {
 
     // Connection events
     this.socket.on('connect', () => {
+      // Check if this was a cold start (multiple connection failures)
+      if (this.connectionFailureCount >= 2) {
+        this.coldStartDetected = true;
+        this.isWarmingUp = true;
+        console.log('Cold start detected, entering warmup period...');
+      }
 
       this.connectionStatus = 'connected';
       this.reconnectAttempts = 0;
       this.reconnectDelay = 1000;
+      this.connectionFailureCount = 0; // Reset failure count on successful connection
       this.eventHandlers.onConnectionStatusChange?.(this.connectionStatus);
       
-      // Rejoin session if we were in one
+      // If warming up, wait before allowing actions
+      if (this.isWarmingUp) {
+        setTimeout(() => {
+          this.isWarmingUp = false;
+          console.log('Warmup period completed, backend ready');
+          this.eventHandlers.onConnectionStatusChange?.(this.connectionStatus);
+          
+          // Reset cold start detection after successful warmup
+          setTimeout(() => {
+            this.coldStartDetected = false;
+            console.log('Cold start detection reset');
+          }, 60000); // Reset after 1 minute of stable connection
+        }, 3000); // 3 second warmup delay
+      }
+      
+      // Attempt to restore session if we were in one
       if (this.currentSessionId && this.userRole) {
-        this.joinSession(this.currentSessionId, this.userRole);
+        this.restoreSession(this.currentSessionId, this.userRole);
       }
     });
 
@@ -69,9 +101,16 @@ class SocketService {
 
     this.socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
+      this.connectionFailureCount++;
       this.connectionStatus = 'disconnected';
       this.eventHandlers.onConnectionStatusChange?.(this.connectionStatus);
-      this.eventHandlers.onError?.(`Connection error: ${error.message}`);
+      
+      // Show different error messages based on failure count
+      if (this.connectionFailureCount >= 2) {
+        this.eventHandlers.onError?.('Backend is starting up, please wait...');
+      } else {
+        this.eventHandlers.onError?.(`Connection error: ${error.message}`);
+      }
       
       this.attemptReconnection();
     });
@@ -80,7 +119,36 @@ class SocketService {
     this.socket.on('session-joined', (data: { sessionId: string; userType: 'venter' | 'listener' }) => {
       this.currentSessionId = data.sessionId;
       this.userRole = data.userType;
+      this.saveSessionToStorage();
       this.eventHandlers.onSessionJoined?.(data.sessionId, data.userType);
+    });
+
+    // Session restoration events
+    this.socket.on('session-restored', (data: { 
+      sessionId: string; 
+      userType: 'venter' | 'listener';
+      messages: Message[];
+      otherUser?: { username?: string; profilePhoto?: string };
+      isOtherUserConnected: boolean;
+    }) => {
+      this.currentSessionId = data.sessionId;
+      this.userRole = data.userType;
+      this.saveSessionToStorage();
+      this.eventHandlers.onSessionRestored?.(
+        data.sessionId, 
+        data.userType, 
+        data.messages, 
+        data.otherUser,
+        data.isOtherUserConnected
+      );
+    });
+
+    this.socket.on('session-not-found', () => {
+      // Session no longer exists, clear local storage
+      this.currentSessionId = null;
+      this.userRole = null;
+      this.clearSessionFromStorage();
+      this.eventHandlers.onSessionNotFound?.();
     });
 
     this.socket.on('receive-message', (message: Message) => {
@@ -102,12 +170,14 @@ class SocketService {
     this.socket.on('session-ended', (data: { sessionId: string; endedBy: 'venter' | 'listener'; timestamp: Date; reason: string }) => {
       this.currentSessionId = null;
       this.userRole = null;
+      this.clearSessionFromStorage();
       this.eventHandlers.onSessionEnded?.(data.reason, data.endedBy);
     });
 
     this.socket.on('match-found', (data: { sessionId: string; userType: 'venter' | 'listener'; timestamp: Date }) => {
       this.currentSessionId = data.sessionId;
       this.userRole = data.userType;
+      this.saveSessionToStorage();
       this.eventHandlers.onMatchFound?.(data.sessionId, data.userType);
     });
 
@@ -132,8 +202,16 @@ class SocketService {
     this.connectionStatus = 'reconnecting';
     this.eventHandlers.onConnectionStatusChange?.(this.connectionStatus);
     
+    // Use longer delays for potential cold starts
+    const baseDelay = this.coldStartDetected ? this.reconnectDelay * 2 : this.reconnectDelay;
+    
     setTimeout(() => {
       this.reconnectAttempts++;
+      
+      // Recreate socket with updated timeout if cold start detected
+      if (this.coldStartDetected && this.reconnectAttempts === 1) {
+        this.setupSocket();
+      }
       
       if (this.socket) {
         this.socket.connect();
@@ -144,7 +222,7 @@ class SocketService {
         this.reconnectDelay * 2 + Math.random() * 1000,
         this.maxReconnectDelay
       );
-    }, this.reconnectDelay);
+    }, baseDelay);
   }
 
   // Public methods
@@ -161,6 +239,7 @@ class SocketService {
       this.socket.disconnect();
       this.currentSessionId = null;
       this.userRole = null;
+      this.clearSessionFromStorage();
     }
   }
 
@@ -236,6 +315,8 @@ class SocketService {
       return;
     }
 
+    // Clear session from storage when intentionally ending
+    this.clearSessionFromStorage();
     const data: EndSessionData = { sessionId };
     this.socket.emit('end-session', data);
   }
@@ -247,6 +328,15 @@ class SocketService {
 
     const data: TypingData = { sessionId, isTyping };
     this.socket.emit('typing', data);
+  }
+
+  restoreSession(sessionId: string, userRole: 'venter' | 'listener'): void {
+    if (!this.socket || this.connectionStatus !== 'connected') {
+      this.eventHandlers.onError?.('Not connected to server');
+      return;
+    }
+
+    this.socket.emit('restore-session', { sessionId, userType: userRole });
   }
 
   // Event handler management
@@ -279,6 +369,53 @@ class SocketService {
     return this.connectionStatus === 'connected' && this.socket?.connected === true;
   }
 
+  isWarmingUpBackend(): boolean {
+    return this.isWarmingUp;
+  }
+
+  isColdStartDetected(): boolean {
+    return this.coldStartDetected;
+  }
+
+  // Session persistence methods
+  private saveSessionToStorage(): void {
+    if (this.currentSessionId && this.userRole) {
+      const sessionData = {
+        sessionId: this.currentSessionId,
+        userRole: this.userRole,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('chat_session', JSON.stringify(sessionData));
+    }
+  }
+
+  private restoreSessionFromStorage(): void {
+    try {
+      const sessionData = localStorage.getItem('chat_session');
+      if (sessionData) {
+        const parsed = JSON.parse(sessionData);
+        // Only restore if session is less than 25 minutes old (before Redis expiry)
+        const sessionAge = Date.now() - parsed.timestamp;
+        const maxAge = 25 * 60 * 1000; // 25 minutes in milliseconds
+        
+        if (sessionAge < maxAge) {
+          this.currentSessionId = parsed.sessionId;
+          this.userRole = parsed.userRole;
+        } else {
+          // Session too old, clear it
+          this.clearSessionFromStorage();
+        }
+      }
+    } catch (error) {
+      console.error('Error restoring session from storage:', error);
+      this.clearSessionFromStorage();
+    }
+  }
+
+  private clearSessionFromStorage(): void {
+    localStorage.removeItem('chat_session');
+  }
+
   // Cleanup
   destroy(): void {
     this.removeEventHandlers();
@@ -290,6 +427,7 @@ class SocketService {
     this.currentSessionId = null;
     this.userRole = null;
     this.connectionStatus = 'disconnected';
+    this.clearSessionFromStorage();
   }
 }
 

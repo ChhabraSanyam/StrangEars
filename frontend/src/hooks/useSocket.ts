@@ -15,6 +15,14 @@ interface UseSocketOptions {
   onError?: (error: string) => void;
   onMatchFound?: (sessionId: string, userType: "venter" | "listener") => void;
   onUserTyping?: (isTyping: boolean) => void;
+  onSessionRestored?: (
+    sessionId: string, 
+    userType: 'venter' | 'listener', 
+    messages: Message[], 
+    otherUser?: { username?: string; profilePhoto?: string },
+    isOtherUserConnected?: boolean
+  ) => void;
+  onSessionNotFound?: () => void;
 }
 
 interface SocketState {
@@ -23,6 +31,8 @@ interface SocketState {
   currentSessionId: string | null;
   userRole: "venter" | "listener" | null;
   isConnected: boolean;
+  isWarmingUp: boolean;
+  isColdStart: boolean;
 }
 
 export const useSocket = (options: UseSocketOptions = {}) => {
@@ -35,6 +45,8 @@ export const useSocket = (options: UseSocketOptions = {}) => {
     currentSessionId: socketService.getCurrentSessionId(),
     userRole: socketService.getUserRole(),
     isConnected: socketService.isConnected(),
+    isWarmingUp: socketService.isWarmingUpBackend(),
+    isColdStart: socketService.isColdStartDetected(),
   }));
 
   const updateSocketState = useCallback(() => {
@@ -44,6 +56,8 @@ export const useSocket = (options: UseSocketOptions = {}) => {
       currentSessionId: socketService.getCurrentSessionId(),
       userRole: socketService.getUserRole(),
       isConnected: socketService.isConnected(),
+      isWarmingUp: socketService.isWarmingUpBackend(),
+      isColdStart: socketService.isColdStartDetected(),
     });
   }, []);
 
@@ -69,6 +83,14 @@ export const useSocket = (options: UseSocketOptions = {}) => {
       onError: (error) => optionsRef.current.onError?.(error),
       onMatchFound: (sessionId, userType) => optionsRef.current.onMatchFound?.(sessionId, userType),
       onUserTyping: (isTyping) => optionsRef.current.onUserTyping?.(isTyping),
+      onSessionRestored: (sessionId, userType, messages, otherUser, isOtherUserConnected) => {
+        updateSocketState();
+        optionsRef.current.onSessionRestored?.(sessionId, userType, messages, otherUser, isOtherUserConnected);
+      },
+      onSessionNotFound: () => {
+        updateSocketState();
+        optionsRef.current.onSessionNotFound?.();
+      },
     };
 
     socketService.setEventHandlers(handlers);
