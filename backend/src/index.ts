@@ -33,6 +33,12 @@ const allowedOrigins = getAllowedOrigins();
 
 // Initialize express app
 const app = express();
+
+// Trust proxy for production deployment (Render, Heroku, etc.)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
