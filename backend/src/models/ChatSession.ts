@@ -103,27 +103,6 @@ export class ChatSessionManager {
   }
 
   /**
-   * Update a session
-   */
-  async updateSession(session: ChatSession): Promise<boolean> {
-    if (this.useRedis && this.redisSessionStorage) {
-      try {
-        await this.redisSessionStorage.updateSession(session);
-        return true;
-      } catch (error) {
-        console.error('Failed to update session in Redis, falling back to memory:', error);
-        this.useRedis = false;
-      }
-    }
-
-    // Fallback to in-memory storage
-    this.sessions.set(session.id, session);
-    this.userSessions.set(session.venterSocketId, session.id);
-    this.userSessions.set(session.listenerSocketId, session.id);
-    return true;
-  }
-
-  /**
    * Get session by user socket ID
    */
   async getSessionByUser(socketId: string): Promise<ChatSession | undefined> {

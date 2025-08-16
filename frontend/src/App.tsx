@@ -8,7 +8,7 @@ import { useSocket } from "./hooks/useSocket";
 import { reportService } from "./services/reportService";
 
 
-type ViewState = "initial" | "form" | "guidelines" | "waiting" | "matched" | "chat" | "main";
+type ViewState = "initial" | "form" | "guidelines" | "waiting" | "matched";
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewState>("initial");
@@ -22,7 +22,6 @@ function App() {
     estimatedWaitTime?: number;
     userType?: 'venter' | 'listener';
     sessionId?: string;
-    status?: string;
   }>({});
   const [error, setError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -45,9 +44,7 @@ function App() {
     sendTypingStatus,
     connectionStatus,
     isConnected,
-    socketId,
-    isWarmingUp,
-    isColdStart
+    socketId
   } = useSocket({
     onMessage: (message) => {
       setChatMessages(prev => [...prev, message]);
@@ -88,41 +85,6 @@ function App() {
     },
     onError: (error) => {
       setError(error);
-    },
-    onSessionRestored: (sessionId, userType, messages, otherUser, isOtherUserConnected) => {
-      // Restore the chat state
-      setChatMessages(messages);
-      setMatchingData({
-        sessionId,
-        userType,
-        status: 'matched'
-      });
-      setCurrentView('chat');
-      setOtherUserConnected(isOtherUserConnected || false);
-      if (otherUser) {
-        setOtherUserName(otherUser.username);
-        if (otherUser.profilePhoto) {
-          // Convert base64 back to File object for display
-          fetch(otherUser.profilePhoto)
-            .then(res => res.blob())
-            .then(blob => {
-              const file = new File([blob], 'profile.jpg', { type: blob.type });
-              setOtherUserPhoto(file);
-            })
-            .catch(err => console.error('Error converting profile photo:', err));
-        }
-      }
-      setError(null);
-    },
-    onSessionNotFound: () => {
-      // Session no longer exists, return to main page
-      setCurrentView('main');
-      setChatMessages([]);
-      setMatchingData({});
-      setOtherUserConnected(false);
-      setOtherUserName(undefined);
-      setOtherUserPhoto(null);
-      setError('Your previous session has expired. Please start a new chat.');
     },
     onMatchFound: (sessionId, userType) => {
       setMatchingData({
@@ -286,34 +248,24 @@ function App() {
     try {
       setError(null);
       
-      // Check if backend is still warming up after cold start
-      if (isWarmingUp) {
-        setError('Backend is warming up, please wait a moment...');
-        return;
-      }
-      
       // Socket should already be connected from username confirmation
-      // But ensure it's connected
+      // But ensure it's connected with a shorter timeout since it should be ready
       if (!isConnected) {
         // Try to connect if not already connected
         connect();
       }
       
-      // Wait for socket to be ready with extended timeout for cold starts
+      // Wait for socket to be ready with a reasonable timeout
       let attempts = 0;
-      const maxAttempts = isColdStart ? 50 : 30; // 5 seconds for cold start, 3 seconds normal
+      const maxAttempts = 30; // 3 seconds total (shorter since socket should already be connecting)
       
-      while ((!socketId || isWarmingUp) && attempts < maxAttempts) {
+      while (!socketId && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 100));
         attempts++;
       }
       
-      if (!socketId || !isConnected || isWarmingUp) {
-        if (isColdStart) {
-          setError('Backend is still starting up. Please wait a moment and try again.');
-        } else {
-          setError('Connection not ready. Please wait a moment and try again.');
-        }
+      if (!socketId || !isConnected) {
+        setError('Connection not ready. Please wait a moment and try again.');
         return;
       }
       
@@ -811,13 +763,12 @@ function App() {
         </section>
 
         {/* Connection Status Indicator */}
-        {showButtons && (connectionStatus !== 'connected' || isWarmingUp) && (
+        {showButtons && connectionStatus !== 'connected' && (
           <div className="absolute top-[55%] left-1/2 -translate-x-1/2 text-center">
             <div className="flex items-center justify-center gap-2 text-slate-medium">
               <div className="w-2 h-2 bg-slate-medium rounded-full animate-pulse"></div>
               <span className="text-sm font-medium">
-                {isWarmingUp ? 'Backend warming up...' :
-                 connectionStatus === 'connecting' ? 'Connecting...' : 
+                {connectionStatus === 'connecting' ? 'Connecting...' : 
                  connectionStatus === 'reconnecting' ? 'Reconnecting...' : 
                  'Preparing connection...'}
               </span>
@@ -841,11 +792,11 @@ function App() {
             <div className="flex justify-between w-full max-w-[800px] md:max-w-[500px] xs:max-w-[500px] mx-auto relative h-auto min-h-[60px]">
               <button
                 onClick={handleVentClick}
-                className={`action-button vent-button ${hoveredButton === "vent" ? 'text-expanded' : ''} ${connectionStatus !== 'connected' || isWarmingUp ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`action-button vent-button ${hoveredButton === "vent" ? 'text-expanded' : ''} ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onMouseEnter={() => !isTouchDevice && setHoveredButton("vent")}
                 onMouseLeave={() => !isTouchDevice && setHoveredButton(null)}
 
-                disabled={connectionStatus !== 'connected' || isWarmingUp}
+                disabled={connectionStatus !== 'connected'}
                 aria-label="Choose to vent - talk to someone who will listen with empathy"
                 aria-describedby="vent-description"
               >
@@ -859,11 +810,11 @@ function App() {
 
               <button
                 onClick={handleListenClick}
-                className={`action-button listen-button ${hoveredButton === "listen" ? 'text-expanded' : ''} ${connectionStatus !== 'connected' || isWarmingUp ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`action-button listen-button ${hoveredButton === "listen" ? 'text-expanded' : ''} ${connectionStatus !== 'connected' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onMouseEnter={() => !isTouchDevice && setHoveredButton("listen")}
                 onMouseLeave={() => !isTouchDevice && setHoveredButton(null)}
 
-                disabled={connectionStatus !== 'connected' || isWarmingUp}
+                disabled={connectionStatus !== 'connected'}
                 aria-label="Choose to listen - help others feel heard and understood"
                 aria-describedby="listen-description"
               >

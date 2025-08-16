@@ -59,10 +59,6 @@ class MatchingApiService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        if (response.status === 403) {
-          // User is restricted
-          throw new Error(errorData.message || 'You are currently restricted from joining chats.');
-        }
         throw new Error(errorData.message || 'Failed to request match');
       }
 

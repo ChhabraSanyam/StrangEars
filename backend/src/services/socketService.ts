@@ -66,20 +66,6 @@ export class SocketService {
         }
       );
 
-      // Handle session restoration
-      socket.on(
-        "restore-session",
-        (data: { sessionId: string; userType: "venter" | "listener" }) => {
-          // Validate input
-          const validation = validateSocketData(data, schemas.joinSession);
-          if (!validation.isValid) {
-            socket.emit("error", { message: validation.error });
-            return;
-          }
-          this.handleRestoreSession(socket, validation.sanitizedData);
-        }
-      );
-
       // Handle sending messages
       socket.on(
         "send-message",
@@ -282,110 +268,6 @@ export class SocketService {
     }
   }
 
-  private async handleRestoreSession(
-    socket: Socket,
-    data: { sessionId: string; userType: "venter" | "listener" }
-  ): Promise<void> {
-    try {
-      const { sessionId, userType } = data;
-
-      // Validate input
-      if (!sessionId || !userType || !["venter", "listener"].includes(userType)) {
-        socket.emit("error", { message: "Invalid session data" });
-        return;
-      }
-
-      // Check if session exists in Redis
-      const session = await this.sessionManager.getSession(sessionId);
-      if (!session) {
-        socket.emit("session-not-found");
-        return;
-      }
-
-      // Check if session is still active
-      if (session.status !== 'active') {
-        socket.emit("session-not-found");
-        return;
-      }
-
-      // Verify user is part of this session
-      const expectedSocketId = userType === 'venter' ? session.venterSocketId : session.listenerSocketId;
-      const isValidUser = expectedSocketId === socket.id || 
-                         session.venterSocketId === socket.id || 
-                         session.listenerSocketId === socket.id;
-
-      if (!isValidUser) {
-        // Allow restoration even with different socket ID (browser refresh case)
-        // Update the session with new socket ID
-        if (userType === 'venter') {
-          session.venterSocketId = socket.id;
-        } else {
-          session.listenerSocketId = socket.id;
-        }
-        await this.sessionManager.updateSession(session);
-      }
-
-      // Update user information
-      const user = this.connectedUsers.get(socket.id);
-      if (user) {
-        user.userType = userType;
-        user.sessionId = sessionId;
-        // Restore username from session if available
-        if (userType === 'venter' && session.venterName) {
-          user.username = session.venterName;
-        } else if (userType === 'listener' && session.listenerName) {
-          user.username = session.listenerName;
-        }
-      }
-
-      // Add socket to session group
-      if (!this.sessionSockets.has(sessionId)) {
-        this.sessionSockets.set(sessionId, new Set());
-      }
-      this.sessionSockets.get(sessionId)!.add(socket.id);
-
-      // Join the socket to the session room
-      socket.join(sessionId);
-
-      // Get other user info
-      const otherUserType = userType === 'venter' ? 'listener' : 'venter';
-      const otherSocketId = userType === 'venter' ? session.listenerSocketId : session.venterSocketId;
-      const otherUser = this.connectedUsers.get(otherSocketId);
-      const isOtherUserConnected = otherUser && this.io.sockets.sockets.has(otherSocketId);
-
-      // Prepare other user data
-      const otherUserData = otherUser ? {
-        username: otherUser.username,
-        profilePhoto: otherUser.profilePhoto
-      } : undefined;
-
-      // Send session restoration data with messages
-      socket.emit("session-restored", {
-        sessionId,
-        userType,
-        messages: session.messages || [],
-        otherUser: otherUserData,
-        isOtherUserConnected: !!isOtherUserConnected,
-        timestamp: new Date(),
-      });
-
-      // Notify the other user if they're connected
-      if (isOtherUserConnected) {
-        socket.to(sessionId).emit("user-joined", {
-          userType,
-          username: user?.username,
-          profilePhoto: user?.profilePhoto,
-          timestamp: new Date(),
-        });
-      }
-
-      console.log(`Session ${sessionId} restored for ${userType} ${socket.id}`);
-    } catch (error) {
-      console.error("Error restoring session:", error);
-      socket.emit("error", { message: "Failed to restore session" });
-    }
-  }
-
   private async handleSendMessage(
     socket: Socket,
     data: { sessionId: string; content: string }
@@ -554,9 +436,6 @@ export class SocketService {
 
       // Clean up any sessions for this user
       await this.sessionManager.cleanupUserSessions(socket.id);
-
-      // Remove user from matching queue if they were waiting
-      await matchingService.removeFromQueue(socket.id);
 
       // Remove user from connected users
       this.connectedUsers.delete(socket.id);
