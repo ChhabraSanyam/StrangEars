@@ -558,6 +558,7 @@ function App() {
         spamWarning={spamWarning}
         messageBlocked={messageBlocked}
         onDismissSpamWarning={() => setSpamWarning(null)}
+        onDismissMessageBlocked={() => setMessageBlocked(null)}
       />
     );
   }
