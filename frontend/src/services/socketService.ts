@@ -121,6 +121,15 @@ class SocketService {
     this.socket.on('user-typing', (data: { isTyping: boolean }) => {
       this.eventHandlers.onUserTyping?.(data.isTyping);
     });
+
+    // Spam protection events
+    this.socket.on('spam-warning', (data: { message: string; action: string; timeRemaining?: number }) => {
+      this.eventHandlers.onSpamWarning?.(data.message);
+    });
+
+    this.socket.on('message-blocked', (data: { message: string; action: string; timeRemaining?: number }) => {
+      this.eventHandlers.onMessageBlocked?.(data.message, data.timeRemaining);
+    });
   }
 
   private attemptReconnection(): void {

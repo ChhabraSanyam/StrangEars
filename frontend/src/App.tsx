@@ -29,6 +29,21 @@ function App() {
   const [otherUserName, setOtherUserName] = useState<string | undefined>(undefined);
   const [otherUserPhoto, setOtherUserPhoto] = useState<File | null>(null);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+  const [spamWarning, setSpamWarning] = useState<string | null>(null);
+  const [messageBlocked, setMessageBlocked] = useState<{
+    message: string;
+    timeRemaining?: number;
+  } | null>(null);
+
+  // Auto-clear message blocked state after timeout
+  useEffect(() => {
+    if (messageBlocked?.timeRemaining) {
+      const timer = setTimeout(() => {
+        setMessageBlocked(null);
+      }, messageBlocked.timeRemaining);
+      return () => clearTimeout(timer);
+    }
+  }, [messageBlocked]);
   
   // Detect if device supports hover (desktop) vs touch-only (mobile)
   const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -97,6 +112,12 @@ function App() {
     },
     onUserTyping: (isTyping) => {
       setIsOtherUserTyping(isTyping);
+    },
+    onSpamWarning: (message) => {
+      setSpamWarning(message);
+    },
+    onMessageBlocked: (message, timeRemaining) => {
+      setMessageBlocked({ message, timeRemaining });
     }
   });
 
@@ -534,6 +555,9 @@ function App() {
             sendTypingStatus(matchingData.sessionId, isTyping);
           }
         }}
+        spamWarning={spamWarning}
+        messageBlocked={messageBlocked}
+        onDismissSpamWarning={() => setSpamWarning(null)}
       />
     );
   }

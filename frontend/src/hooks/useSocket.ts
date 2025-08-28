@@ -15,6 +15,8 @@ interface UseSocketOptions {
   onError?: (error: string) => void;
   onMatchFound?: (sessionId: string, userType: "venter" | "listener") => void;
   onUserTyping?: (isTyping: boolean) => void;
+  onSpamWarning?: (message: string) => void;
+  onMessageBlocked?: (message: string, timeRemaining?: number) => void;
 }
 
 interface SocketState {
@@ -69,6 +71,8 @@ export const useSocket = (options: UseSocketOptions = {}) => {
       onError: (error) => optionsRef.current.onError?.(error),
       onMatchFound: (sessionId, userType) => optionsRef.current.onMatchFound?.(sessionId, userType),
       onUserTyping: (isTyping) => optionsRef.current.onUserTyping?.(isTyping),
+      onSpamWarning: (message) => optionsRef.current.onSpamWarning?.(message),
+      onMessageBlocked: (message, timeRemaining) => optionsRef.current.onMessageBlocked?.(message, timeRemaining),
     };
 
     socketService.setEventHandlers(handlers);

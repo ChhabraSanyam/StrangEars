@@ -28,6 +28,8 @@ export interface ChatEventHandlers {
   onError: (error: string) => void;
   onMatchFound: (sessionId: string, userType: 'venter' | 'listener') => void;
   onUserTyping: (isTyping: boolean) => void;
+  onSpamWarning: (message: string) => void;
+  onMessageBlocked: (message: string, timeRemaining?: number) => void;
 }
 
 export interface JoinSessionData {

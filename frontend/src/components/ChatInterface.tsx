@@ -20,6 +20,12 @@ interface ChatInterfaceProps {
   otherUserPhoto?: File | null;
   isOtherUserTyping?: boolean;
   onTypingChange?: (isTyping: boolean) => void;
+  spamWarning?: string | null;
+  messageBlocked?: {
+    message: string;
+    timeRemaining?: number;
+  } | null;
+  onDismissSpamWarning?: () => void;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -37,6 +43,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   otherUserPhoto,
   isOtherUserTyping = false,
   onTypingChange,
+  spamWarning,
+  messageBlocked,
+  onDismissSpamWarning,
 }) => {
   const [messageInput, setMessageInput] = useState("");
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -48,6 +57,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const previousMessagesLength = useRef(messages.length);
   const [hasNewMessageFromOther, setHasNewMessageFromOther] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [blockCountdown, setBlockCountdown] = useState<number>(0);
 
   // Auto-scroll to bottom only when:
   // 1. A new message arrives from the other user AND
@@ -147,6 +157,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     };
   }, []);
+
+  // Handle spam warning auto-dismiss
+  useEffect(() => {
+    if (spamWarning && onDismissSpamWarning) {
+      const timer = setTimeout(() => {
+        onDismissSpamWarning();
+      }, 5000); // Auto-dismiss after 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [spamWarning, onDismissSpamWarning]);
+
+  // Handle message block countdown
+  useEffect(() => {
+    if (messageBlocked?.timeRemaining) {
+      setBlockCountdown(Math.ceil(messageBlocked.timeRemaining / 1000));
+      
+      const interval = setInterval(() => {
+        setBlockCountdown((prev) => {
+          if (prev <= 1) {
+            // Message block will be cleared by parent component
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [messageBlocked]);
+
+
 
   const handleSendMessage = () => {
     const trimmedMessage = messageInput.trim();
@@ -310,6 +351,55 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Spam Protection Notifications */}
+      {spamWarning && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mx-6 mt-4 rounded-r-lg relative z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-yellow-800 font-inter">{spamWarning}</p>
+              </div>
+            </div>
+            <button
+              onClick={onDismissSpamWarning}
+              className="text-yellow-500 hover:text-yellow-700 transition-colors"
+              aria-label="Dismiss warning"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {messageBlocked && (
+        <div className="bg-red-100 border-l-4 border-red-500 p-4 mx-6 mt-4 rounded-r-lg relative z-10">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-800 font-inter">
+                {messageBlocked.message}
+                {blockCountdown > 0 && (
+                  <span className="ml-2 font-medium">
+                    ({blockCountdown}s remaining)
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages Area */}
       <main className="flex-1 overflow-hidden flex flex-col relative z-10">

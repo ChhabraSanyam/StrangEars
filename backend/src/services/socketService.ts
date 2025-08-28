@@ -4,7 +4,7 @@ import { ChatSessionManager } from "../models/ChatSession";
 import { matchingService } from "./matchingService";
 import { validateSocketData, schemas, filterContent } from "../middleware/validation";
 import { checkMessageThrottle } from "../middleware/socketThrottling";
-import { checkSocketMessageSpam } from "../middleware/spamPrevention";
+import { checkSocketMessageSpam, resetSpamTrackingForSocket } from "../middleware/spamPrevention";
 
 export interface SocketUser {
   socketId: string;
@@ -84,14 +84,33 @@ export class SocketService {
             return;
           }
 
-          // Check for spam
-          const spamCheck = checkSocketMessageSpam(socket, validation.sanitizedData.content);
+          // Check for spam (pass session ID for better tracking)
+          const user = this.connectedUsers.get(socket.id);
+          const spamCheck = checkSocketMessageSpam(
+            socket, 
+            validation.sanitizedData.content, 
+            user?.sessionId
+          );
+          
           if (!spamCheck.allowed) {
-            socket.emit("error", { 
-              message: spamCheck.reason,
-              action: spamCheck.action 
-            });
-            return;
+            // Send appropriate response based on action type
+            if (spamCheck.action === 'warn') {
+              // Send warning but allow message
+              socket.emit("spam-warning", { 
+                message: spamCheck.reason,
+                action: spamCheck.action,
+                timeRemaining: spamCheck.timeRemaining
+              });
+              // Continue processing the message
+            } else {
+              // Block the message
+              socket.emit("message-blocked", { 
+                message: spamCheck.reason,
+                action: spamCheck.action,
+                timeRemaining: spamCheck.timeRemaining
+              });
+              return;
+            }
           }
 
           this.handleSendMessage(socket, validation.sanitizedData);
@@ -381,6 +400,14 @@ export class SocketService {
       // Also clean up from session manager
       await this.sessionManager.cleanupSession(sessionId);
 
+      // Reset spam tracking for users when session ends
+      const sessionSockets = this.sessionSockets.get(sessionId);
+      if (sessionSockets) {
+        sessionSockets.forEach(socketId => {
+          resetSpamTrackingForSocket(socketId);
+        });
+      }
+
     } catch (error) {
       console.error("Error handling end-session:", error);
       socket.emit("error", { message: "Failed to end session" });
@@ -432,6 +459,9 @@ export class SocketService {
 
         // Clean up the session if this was an active session
         this.cleanupSession(user.sessionId);
+
+        // Reset spam tracking when user disconnects
+        resetSpamTrackingForSocket(socket.id);
       }
 
       // Clean up any sessions for this user
@@ -467,6 +497,11 @@ export class SocketService {
 
         // Remove session tracking
         this.sessionSockets.delete(sessionId);
+
+        // Reset spam tracking for all users in the session
+        socketIds.forEach(socketId => {
+          resetSpamTrackingForSocket(socketId);
+        });
 
       }
     } catch (error) {
