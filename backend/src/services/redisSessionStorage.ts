@@ -4,11 +4,10 @@ import { ChatSession, Message } from '../models/ChatSession';
 export class RedisSessionStorage {
   private readonly SESSION_PREFIX = 'session:';
   private readonly USER_SESSION_PREFIX = 'user_session:';
-  private readonly SESSION_EXPIRY = 2 * 60 * 60; // 2 hours in seconds (reduced for memory optimization)
+  private readonly SESSION_EXPIRY = 2 * 60 * 60; // 2 hours in seconds
 
   /**
    * Store a chat session in Redis with automatic expiration
-   * Optimized for minimal memory usage on free tier
    */
   async storeSession(session: ChatSession): Promise<void> {
     try {
@@ -39,7 +38,7 @@ export class RedisSessionStorage {
         client.setex(listenerKey, this.SESSION_EXPIRY, session.id)
       ]);
 
-      console.log(`Session ${session.id} stored in Redis (memory optimized)`);
+      console.log(`Session ${session.id} stored in Redis`);
     } catch (error) {
       console.error('Error storing session in Redis:', error);
       throw new Error('Failed to store session in Redis');
@@ -404,7 +403,7 @@ export class RedisSessionStorage {
         }
       }
 
-      console.log(`Cleaned up ${cleanedCount} old sessions from Redis (memory optimized)`);
+      console.log(`Cleaned up ${cleanedCount} old sessions from Redis`);
       return cleanedCount;
     } catch (error) {
       console.error('Error cleaning up old sessions:', error);

@@ -392,7 +392,10 @@ function App() {
       await reportService.submitReport({
         sessionId: matchingData.sessionId,
         reporterType: matchingData.userType,
-        reason: 'Inappropriate behavior reported by user'
+        reason: 'Inappropriate behavior reported by user',
+        reporterSocketId: socketId,
+        reporterUsername: username,
+        reportedUsername: otherUserName
       });
 
       // The session will be terminated by the backend

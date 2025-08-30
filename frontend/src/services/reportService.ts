@@ -4,6 +4,9 @@ export interface ReportData {
   sessionId: string;
   reporterType: 'venter' | 'listener';
   reason?: string;
+  reporterSocketId?: string;
+  reporterUsername?: string;
+  reportedUsername?: string;
 }
 
 export interface ReportResponse {

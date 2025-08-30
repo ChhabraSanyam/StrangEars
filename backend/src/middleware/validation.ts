@@ -29,7 +29,9 @@ export const schemas = {
     sessionId: Joi.string().uuid().required(),
     reporterType: Joi.string().valid('venter', 'listener').required(),
     reason: Joi.string().min(1).max(500).required(),
-    reporterSocketId: Joi.string().min(1).max(100).optional()
+    reporterSocketId: Joi.string().min(1).max(100).optional(),
+    reporterUsername: Joi.string().min(1).max(50).optional(),
+    reportedUsername: Joi.string().min(1).max(50).optional()
   }),
 
   socketMessage: Joi.object({

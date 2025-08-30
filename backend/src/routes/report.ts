@@ -81,10 +81,8 @@ router.post('/report', reportRateLimit, validate(schemas.reportSubmission), asyn
       };
     }
 
-    // Include risk analysis for admin purposes (could be logged separately)
-    if (result.analysis) {
-      console.log(`Pattern analysis for reported user: Risk level ${result.analysis.riskLevel}, Total reports: ${result.analysis.totalReports}`);
-    }
+    // Log the report for admin review
+    console.log(`Report: "${reporterUsername || 'anonymous'}" reported "${reportedUsername || 'anonymous'}" (${result.analysis?.riskLevel || 'unknown'} risk, ${result.analysis?.totalReports || 0} total reports)${result.restriction ? ` - ${result.restriction.restrictionType} applied` : ''}`);
 
     res.status(201).json(response);
 

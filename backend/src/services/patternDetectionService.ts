@@ -105,31 +105,31 @@ class PatternDetectionService {
   ): { riskLevel: PatternAnalysis['riskLevel'], recommendedAction: PatternAnalysis['recommendedAction'] } {
     let riskScore = 0;
 
-    // Base score from total reports
-    riskScore += Math.min(totalReports * 10, 50);
+    // Base score from total reports (more lenient)
+    riskScore += Math.min(totalReports * 5, 30);
 
-    // Recent activity penalty
-    riskScore += reportsInLast24Hours * 20;
-    riskScore += reportsInLastWeek * 5;
+    // Recent activity penalty (reduced)
+    riskScore += reportsInLast24Hours * 10;
+    riskScore += reportsInLastWeek * 3;
 
-    // Serious report types get higher penalties
+    // Serious report types get higher penalties (reduced)
     const seriousTypes = ['harassment', 'inappropriate_behavior'];
     const seriousReports = seriousTypes.reduce((sum, type) => sum + (reportTypes[type] || 0), 0);
-    riskScore += seriousReports * 15;
+    riskScore += seriousReports * 8;
 
     // Frequent reporting (short time between reports) increases risk
     if (averageTimeBetweenReports > 0 && averageTimeBetweenReports < 60) { // Less than 1 hour between reports
-      riskScore += 25;
+      riskScore += 20;
     } else if (averageTimeBetweenReports < 24 * 60) { // Less than 1 day between reports
-      riskScore += 10;
+      riskScore += 8;
     }
 
-    // Determine risk level and action
-    if (riskScore >= 80) {
+    // More lenient thresholds - require multiple reports for action
+    if (riskScore >= 100) {
       return { riskLevel: 'critical', recommendedAction: 'permanent_ban' };
-    } else if (riskScore >= 50) {
+    } else if (riskScore >= 70 && totalReports >= 3) {
       return { riskLevel: 'high', recommendedAction: 'temporary_ban' };
-    } else if (riskScore >= 25) {
+    } else if (riskScore >= 40 && totalReports >= 2) {
       return { riskLevel: 'medium', recommendedAction: 'warning' };
     } else {
       return { riskLevel: 'low', recommendedAction: 'none' };

@@ -64,7 +64,28 @@ class MatchingService {
         
         if (restriction) {
           console.log(`Blocked restricted user ${userSessionId} from joining queue. Restriction: ${restriction.restrictionType}`);
-          throw new Error(`User is currently restricted: ${restriction.reason}`);
+          
+          // Calculate remaining time for temporary restrictions
+          let timeRemaining = '';
+          if (restriction.endTime) {
+            const remainingMs = restriction.endTime.getTime() - Date.now();
+            if (remainingMs > 0) {
+              const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+              if (remainingMinutes < 60) {
+                timeRemaining = `${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+              } else {
+                const remainingHours = Math.ceil(remainingMinutes / 60);
+                timeRemaining = `${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
+              }
+            }
+          }
+          
+          const errorMessage = restriction.restrictionType === 'permanent_ban' 
+            ? 'Your account has been permanently restricted due to multiple reports.'
+            : `You are temporarily restricted from joining sessions${timeRemaining ? ` for ${timeRemaining}` : ''}. This restriction was applied due to reported behavior.`;
+            
+          const { AppError } = await import('../middleware/errorHandler');
+          throw new AppError(errorMessage, 403);
         }
       } catch (error) {
         if (error instanceof Error && error.message.includes('restricted')) {
