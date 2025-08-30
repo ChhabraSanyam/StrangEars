@@ -129,13 +129,6 @@ function App() {
     setShowButtonsAnimation(showButtons);
   }, [showButtons]);
 
-  // Auto-confirm username if it's already persisted
-  useEffect(() => {
-    if (username.trim().length > 0 && !usernameConfirmed) {
-      setUsernameConfirmed(true);
-    }
-  }, [username, usernameConfirmed]);
-
   useEffect(() => {
     // Touch handling for mobile devices
     let touchStartY = 0;

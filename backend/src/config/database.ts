@@ -1,19 +1,22 @@
 import { Pool, PoolClient } from "pg";
+import sqlite3 from "sqlite3";
+import { promisify } from "util";
 
-class Database {
-  private pgPool!: Pool;
+interface DatabaseAdapter {
+  run(sql: string, params?: any[]): Promise<any>;
+  get<T = any>(sql: string, params?: any[]): Promise<T | undefined>;
+  all<T = any>(sql: string, params?: any[]): Promise<T[]>;
+  transaction<T>(callback: (client?: any) => Promise<T>): Promise<T>;
+  healthCheck(): Promise<boolean>;
+  close(): Promise<void>;
+}
 
-  constructor() {
-    this.connect();
-  }
+class PostgreSQLAdapter implements DatabaseAdapter {
+  private pgPool: Pool;
 
-  private connect(): void {
-    if (!process.env.DATABASE_URL) {
-      throw new Error("DATABASE_URL environment variable must be set");
-    }
-
+  constructor(connectionString: string) {
     this.pgPool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
       ssl:
         process.env.NODE_ENV === "production"
           ? { rejectUnauthorized: false }
@@ -26,67 +29,249 @@ class Database {
     });
 
     this.pgPool.on("error", (err: Error) => {
-      console.error("Database connection error:", err);
+      console.error("PostgreSQL connection error:", err);
     });
-
-    this.validateConnection();
   }
 
-  private async validateConnection(): Promise<void> {
+  private convertSqliteToPostgres(sql: string): string {
+    return sql.replace(/\?/g, (_match, offset, string) => {
+      const beforeMatch = string.substring(0, offset);
+      const paramNumber = (beforeMatch.match(/\?/g) || []).length + 1;
+      return `$${paramNumber}`;
+    });
+  }
+
+  async run(sql: string, params: any[] = []): Promise<any> {
+    const pgSql = this.convertSqliteToPostgres(sql);
+    const result = await this.pgPool.query(pgSql, params);
+    return { changes: result.rowCount };
+  }
+
+  async get<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
+    const pgSql = this.convertSqliteToPostgres(sql);
+    const result = await this.pgPool.query(pgSql, params);
+    return result.rows[0] as T;
+  }
+
+  async all<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+    const pgSql = this.convertSqliteToPostgres(sql);
+    const result = await this.pgPool.query(pgSql, params);
+    return result.rows as T[];
+  }
+
+  async transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pgPool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await callback(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async healthCheck(): Promise<boolean> {
     try {
       const client = await this.pgPool.connect();
-      await client.query("SELECT NOW()");
+      await client.query("SELECT 1");
       client.release();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.pgPool.end();
+  }
+}
+
+class SQLiteAdapter implements DatabaseAdapter {
+  private db: sqlite3.Database;
+  private runAsync: (sql: string, params?: any[]) => Promise<sqlite3.RunResult>;
+  private getAsync: (sql: string, params?: any[]) => Promise<any>;
+  private allAsync: (sql: string, params?: any[]) => Promise<any[]>;
+
+  constructor() {
+    this.db = new sqlite3.Database(":memory:");
+    this.runAsync = promisify(this.db.run.bind(this.db));
+    this.getAsync = promisify(this.db.get.bind(this.db));
+    this.allAsync = promisify(this.db.all.bind(this.db));
+  }
+
+  async run(sql: string, params: any[] = []): Promise<any> {
+    const result = await this.runAsync(sql, params);
+    return { changes: result?.changes || 0 };
+  }
+
+  async get<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
+    return await this.getAsync(sql, params) as T;
+  }
+
+  async all<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+    return await this.allAsync(sql, params) as T[];
+  }
+
+  async transaction<T>(callback: () => Promise<T>): Promise<T> {
+    await this.runAsync("BEGIN TRANSACTION");
+    try {
+      const result = await callback();
+      await this.runAsync("COMMIT");
+      return result;
+    } catch (error) {
+      await this.runAsync("ROLLBACK");
+      throw error;
+    }
+  }
+
+  async healthCheck(): Promise<boolean> {
+    try {
+      await this.getAsync("SELECT 1");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async close(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.close((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+}
+
+class Database {
+  private adapter!: DatabaseAdapter;
+  private usingPostgreSQL: boolean = false;
+  private initPromise: Promise<void>;
+
+  constructor() {
+    this.initPromise = this.connect();
+  }
+
+  async waitForInit(): Promise<void> {
+    await this.initPromise;
+  }
+
+  private async connect(): Promise<void> {
+    // Try PostgreSQL first
+    if (process.env.DATABASE_URL) {
+      try {
+        console.log("Attempting to connect to PostgreSQL...");
+        const pgAdapter = new PostgreSQLAdapter(process.env.DATABASE_URL);
+        
+        // Test the connection
+        const isHealthy = await pgAdapter.healthCheck();
+        if (isHealthy) {
+          this.adapter = pgAdapter;
+          this.usingPostgreSQL = true;
+          console.log("Connected to PostgreSQL successfully");
+          await this.initializeTables();
+          return;
+        }
+      } catch (error) {
+        console.warn("PostgreSQL connection failed:", error instanceof Error ? error.message : String(error));
+      }
+    } else {
+      console.warn("DATABASE_URL not set, skipping PostgreSQL");
+    }
+
+    // Fallback to SQLite
+    console.log("Falling back to in-memory SQLite...");
+    try {
+      this.adapter = new SQLiteAdapter();
+      this.usingPostgreSQL = false;
+      console.log("Connected to SQLite successfully");
       await this.initializeTables();
     } catch (error) {
-      console.error("Failed to validate PostgreSQL connection:", error);
-      throw error;
+      console.error("SQLite fallback failed:", error);
+      throw new Error("Failed to initialize any database connection");
     }
   }
 
   private async initializeTables(): Promise<void> {
     try {
-      // Create reports table
-      await this.pgPool.query(`
-        CREATE TABLE IF NOT EXISTS reports (
-          id TEXT PRIMARY KEY CHECK (length(id) <= 36),
-          session_id TEXT NOT NULL CHECK (length(session_id) <= 100),
-          reporter_type TEXT NOT NULL CHECK (reporter_type IN ('venter', 'listener')),
-          reason TEXT CHECK (length(reason) <= 1000),
-          timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          resolved BOOLEAN DEFAULT FALSE,
-          reporter_username TEXT CHECK (length(reporter_username) <= 100),
-          reported_username TEXT CHECK (length(reported_username) <= 100)
-        )
-      `);
+      console.log(`Initializing tables for ${this.usingPostgreSQL ? 'PostgreSQL' : 'SQLite'}...`);
+
+      // Create reports table (compatible with both PostgreSQL and SQLite)
+      const reportsTableSql = this.usingPostgreSQL 
+        ? `CREATE TABLE IF NOT EXISTS reports (
+            id TEXT PRIMARY KEY CHECK (length(id) <= 36),
+            session_id TEXT NOT NULL CHECK (length(session_id) <= 100),
+            reporter_type TEXT NOT NULL CHECK (reporter_type IN ('venter', 'listener')),
+            reason TEXT CHECK (length(reason) <= 1000),
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved BOOLEAN DEFAULT FALSE,
+            reporter_username TEXT CHECK (length(reporter_username) <= 100),
+            reported_username TEXT CHECK (length(reported_username) <= 100)
+          )`
+        : `CREATE TABLE IF NOT EXISTS reports (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            reporter_type TEXT NOT NULL CHECK (reporter_type IN ('venter', 'listener')),
+            reason TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            resolved BOOLEAN DEFAULT FALSE,
+            reporter_username TEXT,
+            reported_username TEXT
+          )`;
+
+      await this.adapter.run(reportsTableSql);
 
       // Create user_patterns table
-      await this.pgPool.query(`
-        CREATE TABLE IF NOT EXISTS user_patterns (
-          id TEXT PRIMARY KEY CHECK (length(id) <= 36),
-          user_session_id TEXT NOT NULL CHECK (length(user_session_id) <= 36),
-          session_id TEXT NOT NULL CHECK (length(session_id) <= 100),
-          report_type TEXT NOT NULL CHECK (report_type IN ('inappropriate_behavior', 'spam', 'harassment', 'other')),
-          reporter_type TEXT NOT NULL CHECK (reporter_type IN ('venter', 'listener')),
-          reported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
+      const userPatternsTableSql = this.usingPostgreSQL
+        ? `CREATE TABLE IF NOT EXISTS user_patterns (
+            id TEXT PRIMARY KEY CHECK (length(id) <= 36),
+            user_session_id TEXT NOT NULL CHECK (length(user_session_id) <= 36),
+            session_id TEXT NOT NULL CHECK (length(session_id) <= 100),
+            report_type TEXT NOT NULL CHECK (report_type IN ('inappropriate_behavior', 'spam', 'harassment', 'other')),
+            reporter_type TEXT NOT NULL CHECK (reporter_type IN ('venter', 'listener')),
+            reported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )`
+        : `CREATE TABLE IF NOT EXISTS user_patterns (
+            id TEXT PRIMARY KEY,
+            user_session_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            report_type TEXT NOT NULL CHECK (report_type IN ('inappropriate_behavior', 'spam', 'harassment', 'other')),
+            reporter_type TEXT NOT NULL CHECK (reporter_type IN ('venter', 'listener')),
+            reported_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )`;
+
+      await this.adapter.run(userPatternsTableSql);
 
       // Create user_restrictions table
-      await this.pgPool.query(`
-        CREATE TABLE IF NOT EXISTS user_restrictions (
-          id TEXT PRIMARY KEY CHECK (length(id) <= 36),
-          user_session_id TEXT NOT NULL CHECK (length(user_session_id) <= 36),
-          restriction_type TEXT NOT NULL CHECK (restriction_type IN ('temporary_ban', 'warning', 'permanent_ban')),
-          start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          end_time TIMESTAMP,
-          reason TEXT NOT NULL CHECK (length(reason) <= 1000),
-          report_count INTEGER NOT NULL DEFAULT 1 CHECK (report_count >= 0 AND report_count <= 1000),
-          is_active BOOLEAN DEFAULT TRUE
-        )
-      `);
+      const userRestrictionsTableSql = this.usingPostgreSQL
+        ? `CREATE TABLE IF NOT EXISTS user_restrictions (
+            id TEXT PRIMARY KEY CHECK (length(id) <= 36),
+            user_session_id TEXT NOT NULL CHECK (length(user_session_id) <= 36),
+            restriction_type TEXT NOT NULL CHECK (restriction_type IN ('temporary_ban', 'warning', 'permanent_ban')),
+            start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            end_time TIMESTAMP,
+            reason TEXT NOT NULL CHECK (length(reason) <= 1000),
+            report_count INTEGER NOT NULL DEFAULT 1 CHECK (report_count >= 0 AND report_count <= 1000),
+            is_active BOOLEAN DEFAULT TRUE
+          )`
+        : `CREATE TABLE IF NOT EXISTS user_restrictions (
+            id TEXT PRIMARY KEY,
+            user_session_id TEXT NOT NULL,
+            restriction_type TEXT NOT NULL CHECK (restriction_type IN ('temporary_ban', 'warning', 'permanent_ban')),
+            start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            end_time DATETIME,
+            reason TEXT NOT NULL,
+            report_count INTEGER NOT NULL DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE
+          )`;
 
-      // Create indexes
+      await this.adapter.run(userRestrictionsTableSql);
+
+      // Create indexes (both databases support these)
       const indexes = [
         "CREATE INDEX IF NOT EXISTS idx_reports_session_id ON reports(session_id)",
         "CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp)",
@@ -99,21 +284,32 @@ class Database {
       ];
 
       for (const indexSql of indexes) {
-        await this.pgPool.query(indexSql);
+        try {
+          await this.adapter.run(indexSql);
+        } catch (error) {
+          // Indexes might fail in SQLite if they already exist, that's okay
+          console.warn(`Index creation warning: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
 
-      // Perform startup cleanup
-      await this.performStartupCleanup();
+      // Perform startup cleanup (only for PostgreSQL to avoid issues with SQLite date functions)
+      if (this.usingPostgreSQL) {
+        await this.performStartupCleanup();
+      }
+
+      console.log("Database tables initialized successfully");
     } catch (error) {
-      console.error("Error initializing PostgreSQL tables:", error);
+      console.error("Error initializing database tables:", error);
       throw error;
     }
   }
 
   private async performStartupCleanup(): Promise<void> {
     try {
-      // Deactivate expired restrictions
-      await this.pgPool.query(`
+      console.log("Performing startup cleanup...");
+
+      // Deactivate expired restrictions (PostgreSQL only - uses INTERVAL)
+      await this.adapter.run(`
         UPDATE user_restrictions 
         SET is_active = false 
         WHERE is_active = true 
@@ -122,27 +318,28 @@ class Database {
       `);
 
       // Delete old resolved reports (older than 60 days)
-      await this.pgPool.query(`
+      await this.adapter.run(`
         DELETE FROM reports 
         WHERE resolved = true 
           AND timestamp < CURRENT_TIMESTAMP - INTERVAL '60 days'
       `);
 
       // Delete old user patterns (older than 30 days)
-      await this.pgPool.query(`
+      await this.adapter.run(`
         DELETE FROM user_patterns 
         WHERE reported_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
       `);
 
       // Delete old inactive restrictions (older than 90 days)
-      await this.pgPool.query(`
+      await this.adapter.run(`
         DELETE FROM user_restrictions 
         WHERE is_active = false 
           AND start_time < CURRENT_TIMESTAMP - INTERVAL '90 days'
       `);
 
+      console.log("Startup cleanup completed");
     } catch (error) {
-      console.error("Startup cleanup failed:", error);
+      console.error("Startup cleanup failed:", error instanceof Error ? error.message : String(error));
       // Don't throw - let the app continue even if cleanup fails
     }
   }
@@ -188,78 +385,55 @@ class Database {
     return isAllowed && !hasDangerousKeywords;
   }
 
-  private convertSqliteToPostgres(sql: string): string {
-    return sql.replace(/\?/g, (_match, offset, string) => {
-      const beforeMatch = string.substring(0, offset);
-      const paramNumber = (beforeMatch.match(/\?/g) || []).length + 1;
-      return `$${paramNumber}`;
-    });
-  }
-
   public async run(sql: string, params: any[] = []): Promise<any> {
+    await this.waitForInit();
     if (!this.isValidSql(sql)) {
       throw new Error("Invalid SQL statement");
     }
-
-    const pgSql = this.convertSqliteToPostgres(sql);
-    const result = await this.pgPool.query(pgSql, params);
-    return { changes: result.rowCount };
+    return await this.adapter.run(sql, params);
   }
 
   public async get<T = any>(
     sql: string,
     params: any[] = []
   ): Promise<T | undefined> {
+    await this.waitForInit();
     if (!this.isValidSql(sql)) {
       throw new Error("Invalid SQL statement");
     }
-
-    const pgSql = this.convertSqliteToPostgres(sql);
-    const result = await this.pgPool.query(pgSql, params);
-    return result.rows[0] as T;
+    return await this.adapter.get<T>(sql, params);
   }
 
   public async all<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+    await this.waitForInit();
     if (!this.isValidSql(sql)) {
       throw new Error("Invalid SQL statement");
     }
-
-    const pgSql = this.convertSqliteToPostgres(sql);
-    const result = await this.pgPool.query(pgSql, params);
-    return result.rows as T[];
+    return await this.adapter.all<T>(sql, params);
   }
 
   public async transaction<T>(
-    callback: (client: PoolClient) => Promise<T>
+    callback: (client?: any) => Promise<T>
   ): Promise<T> {
-    const client = await this.pgPool.connect();
-
-    try {
-      await client.query("BEGIN");
-      const result = await callback(client);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+    await this.waitForInit();
+    return await this.adapter.transaction(callback);
   }
 
   public async healthCheck(): Promise<boolean> {
-    try {
-      const client = await this.pgPool.connect();
-      await client.query("SELECT 1");
-      client.release();
-      return true;
-    } catch {
-      return false;
-    }
+    await this.waitForInit();
+    return await this.adapter.healthCheck();
   }
 
   public async close(): Promise<void> {
-    await this.pgPool.end();
+    await this.adapter.close();
+  }
+
+  public getDatabaseType(): 'postgresql' | 'sqlite' {
+    return this.usingPostgreSQL ? 'postgresql' : 'sqlite';
+  }
+
+  public isUsingPostgreSQL(): boolean {
+    return this.usingPostgreSQL;
   }
 }
 

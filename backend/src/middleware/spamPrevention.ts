@@ -13,11 +13,11 @@ interface SpamTracker {
 class SpamPreventionService {
   private spamTrackers = new Map<string, SpamTracker>();
   private readonly MAX_DUPLICATE_MESSAGES = 5;
-  private readonly DUPLICATE_WINDOW_MS = 30 * 1000; // 30 secondss
+  private readonly DUPLICATE_WINDOW_MS = 1 * 60 * 1000; // 1 minute
   private readonly MAX_RAPID_MESSAGES = 10; // 10
   private readonly RAPID_FIRE_WINDOW_MS = 30 * 1000; // 30 seconds
   private readonly MAX_VIOLATIONS = 5; // 5
-  private readonly VIOLATION_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly VIOLATION_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes
   private readonly MESSAGE_HISTORY_LIMIT = 20; // 20
   private readonly MAX_WARNINGS = 2;
 
