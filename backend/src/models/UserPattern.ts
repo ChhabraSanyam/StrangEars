@@ -1,6 +1,6 @@
 export interface UserPattern {
   id: string;
-  socketId: string;
+  userSessionId: string;
   sessionId: string;
   reportedAt: Date;
   reportType: 'inappropriate_behavior' | 'spam' | 'harassment' | 'other';
@@ -9,7 +9,7 @@ export interface UserPattern {
 
 export interface UserRestriction {
   id: string;
-  socketId: string;
+  userSessionId: string;
   restrictionType: 'temporary_ban' | 'warning' | 'permanent_ban';
   startTime: Date;
   endTime?: Date;
@@ -19,14 +19,14 @@ export interface UserRestriction {
 }
 
 export interface CreateUserPatternData {
-  socketId: string;
+  userSessionId: string;
   sessionId: string;
   reportType: 'inappropriate_behavior' | 'spam' | 'harassment' | 'other';
   reporterType: 'venter' | 'listener';
 }
 
 export interface CreateUserRestrictionData {
-  socketId: string;
+  userSessionId: string;
   restrictionType: 'temporary_ban' | 'warning' | 'permanent_ban';
   durationMinutes?: number;
   reason: string;
@@ -34,7 +34,7 @@ export interface CreateUserRestrictionData {
 }
 
 export interface PatternAnalysis {
-  socketId: string;
+  userSessionId: string;
   totalReports: number;
   reportsInLast24Hours: number;
   reportsInLastWeek: number;

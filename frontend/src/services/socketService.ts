@@ -8,6 +8,7 @@ import {
   EndSessionData,
   TypingData
 } from '../types/chat';
+import { userSessionIdManager } from '../utils/userSessionId';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -179,6 +180,9 @@ class SocketService {
       return;
     }
 
+    // Get the persistent userSessionId
+    const userSessionId = userSessionIdManager.getUserSessionId();
+
     // Convert profile photo to base64 if provided
     if (profilePhoto && profilePhoto instanceof File) {
       const reader = new FileReader();
@@ -191,7 +195,7 @@ class SocketService {
           if (base64Photo.length > 200 * 1024) { // 200KB base64 limit (≈150KB file)
             console.warn('Profile photo still too large after optimization, sending without photo');
             // Send without photo to ensure username still gets through
-            const data: JoinSessionData = { sessionId, userType: userRole, username };
+            const data: JoinSessionData = { sessionId, userType: userRole, username, userSessionId };
             this.socket!.emit('join-session', data);
             this.eventHandlers.onError?.('Profile photo optimization failed. Joining without photo.');
             return;
@@ -199,12 +203,12 @@ class SocketService {
           
           console.log(`Transmitting optimized profile photo: ${Math.round(base64Photo.length / 1024)}KB`);
           
-          const data: JoinSessionData = { sessionId, userType: userRole, username, profilePhoto: base64Photo };
+          const data: JoinSessionData = { sessionId, userType: userRole, username, profilePhoto: base64Photo, userSessionId };
           this.socket!.emit('join-session', data);
         } catch (error) {
           console.error('Error processing profile photo:', error);
           // Fallback: send without photo to ensure username gets through
-          const data: JoinSessionData = { sessionId, userType: userRole, username };
+          const data: JoinSessionData = { sessionId, userType: userRole, username, userSessionId };
           this.socket!.emit('join-session', data);
           this.eventHandlers.onError?.('Failed to process profile photo. Joining session without photo.');
         }
@@ -213,14 +217,14 @@ class SocketService {
       reader.onerror = () => {
         console.error('Error reading profile photo file');
         // Fallback: send without photo to ensure username gets through
-        const data: JoinSessionData = { sessionId, userType: userRole, username };
+        const data: JoinSessionData = { sessionId, userType: userRole, username, userSessionId };
         this.socket!.emit('join-session', data);
         this.eventHandlers.onError?.('Failed to read profile photo. Joining session without photo.');
       };
       
       reader.readAsDataURL(profilePhoto);
     } else {
-      const data: JoinSessionData = { sessionId, userType: userRole, username };
+      const data: JoinSessionData = { sessionId, userType: userRole, username, userSessionId };
       this.socket.emit('join-session', data);
     }
   }

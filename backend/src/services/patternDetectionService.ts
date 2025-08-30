@@ -15,7 +15,7 @@ class PatternDetectionService {
   async recordUserPattern(patternData: CreateUserPatternData): Promise<UserPattern> {
     const pattern: UserPattern = {
       id: uuidv4(),
-      socketId: patternData.socketId,
+      userSessionId: patternData.userSessionId,
       sessionId: patternData.sessionId,
       reportedAt: new Date(),
       reportType: patternData.reportType,
@@ -23,13 +23,13 @@ class PatternDetectionService {
     };
 
     const sql = `
-      INSERT INTO user_patterns (id, socket_id, session_id, report_type, reporter_type, reported_at)
+      INSERT INTO user_patterns (id, user_session_id, session_id, report_type, reporter_type, reported_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
       pattern.id,
-      pattern.socketId,
+      pattern.userSessionId,
       pattern.sessionId,
       pattern.reportType,
       pattern.reporterType,
@@ -41,11 +41,11 @@ class PatternDetectionService {
   }
 
   /**
-   * Analyze user patterns to determine risk level and recommended action
+   * Analyze user patterns by userSessionId to determine risk level and recommended action
    */
-  async analyzeUserPattern(socketId: string): Promise<PatternAnalysis> {
-    // Get all patterns for this user
-    const allPatterns = await this.getUserPatterns(socketId);
+  async analyzeUserPatternByUserSessionId(userSessionId: string): Promise<PatternAnalysis> {
+    // Get all patterns for this user session
+    const allPatterns = await this.getUserPatternsByUserSessionId(userSessionId);
     
     // Calculate time-based metrics
     const now = new Date();
@@ -82,7 +82,7 @@ class PatternDetectionService {
     );
 
     return {
-      socketId,
+      userSessionId,
       totalReports: allPatterns.length,
       reportsInLast24Hours,
       reportsInLastWeek,
@@ -137,18 +137,18 @@ class PatternDetectionService {
   }
 
   /**
-   * Get all patterns for a specific user
+   * Get all patterns for a specific user by userSessionId
    */
-  async getUserPatterns(socketId: string): Promise<UserPattern[]> {
+  async getUserPatternsByUserSessionId(userSessionId: string): Promise<UserPattern[]> {
     const sql = `
-      SELECT id, socket_id as socketId, session_id as sessionId, 
+      SELECT id, user_session_id as userSessionId, session_id as sessionId, 
              report_type as reportType, reporter_type as reporterType, reported_at as reportedAt
       FROM user_patterns 
-      WHERE socket_id = ?
+      WHERE user_session_id = ?
       ORDER BY reported_at DESC
     `;
 
-    const rows = await database.all<any>(sql, [socketId]);
+    const rows = await database.all<any>(sql, [userSessionId]);
     
     return rows.map((row: any) => ({
       ...row,
@@ -161,11 +161,11 @@ class PatternDetectionService {
    */
   async createUserRestriction(restrictionData: CreateUserRestrictionData): Promise<UserRestriction> {
     // First, deactivate any existing active restrictions for this user
-    await this.deactivateUserRestrictions(restrictionData.socketId);
+    await this.deactivateUserRestrictionsByUserSessionId(restrictionData.userSessionId);
 
     const restriction: UserRestriction = {
       id: uuidv4(),
-      socketId: restrictionData.socketId,
+      userSessionId: restrictionData.userSessionId,
       restrictionType: restrictionData.restrictionType,
       startTime: new Date(),
       endTime: restrictionData.durationMinutes 
@@ -177,13 +177,13 @@ class PatternDetectionService {
     };
 
     const sql = `
-      INSERT INTO user_restrictions (id, socket_id, restriction_type, start_time, end_time, reason, report_count, is_active)
+      INSERT INTO user_restrictions (id, user_session_id, restriction_type, start_time, end_time, reason, report_count, is_active)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
       restriction.id,
-      restriction.socketId,
+      restriction.userSessionId,
       restriction.restrictionType,
       restriction.startTime.toISOString(),
       restriction.endTime?.toISOString() || null,
@@ -197,19 +197,19 @@ class PatternDetectionService {
   }
 
   /**
-   * Check if a user is currently restricted
+   * Check if a user is currently restricted by userSessionId
    */
-  async isUserRestricted(socketId: string): Promise<UserRestriction | null> {
+  async isUserRestrictedByUserSessionId(userSessionId: string): Promise<UserRestriction | null> {
     const sql = `
-      SELECT id, socket_id as socketId, restriction_type as restrictionType,
+      SELECT id, user_session_id as userSessionId, restriction_type as restrictionType,
              start_time as startTime, end_time as endTime, reason, report_count as reportCount, is_active as isActive
       FROM user_restrictions 
-      WHERE socket_id = ? AND is_active = true
+      WHERE user_session_id = ? AND is_active = true
       ORDER BY start_time DESC
       LIMIT 1
     `;
 
-    const row = await database.get<any>(sql, [socketId]);
+    const row = await database.get<any>(sql, [userSessionId]);
     
     if (!row) {
       return null;
@@ -240,40 +240,44 @@ class PatternDetectionService {
     return result.changes > 0;
   }
 
+
+
   /**
-   * Deactivate all active restrictions for a user
+   * Deactivate all active restrictions for a user by userSessionId
    */
-  async deactivateUserRestrictions(socketId: string): Promise<number> {
-    const sql = 'UPDATE user_restrictions SET is_active = false WHERE socket_id = ? AND is_active = true';
-    const result = await database.run(sql, [socketId]);
+  async deactivateUserRestrictionsByUserSessionId(userSessionId: string): Promise<number> {
+    const sql = 'UPDATE user_restrictions SET is_active = false WHERE user_session_id = ? AND is_active = true';
+    const result = await database.run(sql, [userSessionId]);
     return result.changes;
   }
 
+
+
   /**
-   * Process a report and apply automatic restrictions if needed
+   * Process a report and apply automatic restrictions if needed using userSessionId
    */
-  async processReportAndApplyRestrictions(
-    reportedSocketId: string,
+  async processReportAndApplyRestrictionsByUserSessionId(
+    reportedUserSessionId: string,
     sessionId: string,
     reportType: 'inappropriate_behavior' | 'spam' | 'harassment' | 'other',
     reporterType: 'venter' | 'listener'
   ): Promise<{ restriction?: UserRestriction; analysis: PatternAnalysis }> {
     // Record the pattern
     await this.recordUserPattern({
-      socketId: reportedSocketId,
+      userSessionId: reportedUserSessionId,
       sessionId,
       reportType,
       reporterType
     });
 
-    // Analyze the user's pattern
-    const analysis = await this.analyzeUserPattern(reportedSocketId);
+    // Analyze the user's pattern using userSessionId
+    const analysis = await this.analyzeUserPatternByUserSessionId(reportedUserSessionId);
 
     // Apply restriction if recommended
     let restriction: UserRestriction | undefined;
     if (analysis.recommendedAction !== 'none') {
       const restrictionData: CreateUserRestrictionData = {
-        socketId: reportedSocketId,
+        userSessionId: reportedUserSessionId,
         restrictionType: analysis.recommendedAction,
         reason: `Automatic restriction applied due to ${analysis.totalReports} reports. Risk level: ${analysis.riskLevel}`,
         reportCount: analysis.totalReports
@@ -364,7 +368,7 @@ class PatternDetectionService {
    */
   async getRecentPatterns(limit: number = 50): Promise<UserPattern[]> {
     const sql = `
-      SELECT id, socket_id as socketId, session_id as sessionId, 
+      SELECT id, user_session_id as userSessionId, session_id as sessionId, 
              report_type as reportType, reporter_type as reporterType, reported_at as reportedAt
       FROM user_patterns 
       ORDER BY reported_at DESC
@@ -384,7 +388,7 @@ class PatternDetectionService {
    */
   async getActiveRestrictions(): Promise<UserRestriction[]> {
     const sql = `
-      SELECT id, socket_id as socketId, restriction_type as restrictionType,
+      SELECT id, user_session_id as userSessionId, restriction_type as restrictionType,
              start_time as startTime, end_time as endTime, reason, report_count as reportCount, is_active as isActive
       FROM user_restrictions 
       WHERE is_active = true

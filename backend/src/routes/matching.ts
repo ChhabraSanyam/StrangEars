@@ -10,7 +10,7 @@ const router = Router();
 // POST /api/match - Request matching
 router.post('/match', matchingRateLimit, validate(schemas.matchRequest), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { userType, socketId } = req.body;
+    const { userType, socketId, userSessionId } = req.body;
 
     // Validate user type
     if (!userType || !['venter', 'listener'].includes(userType)) {
@@ -23,7 +23,7 @@ router.post('/match', matchingRateLimit, validate(schemas.matchRequest), async (
     }
 
     // Add to queue and attempt matching
-    const match = await matchingService.addToQueue(socketId, userType);
+    const match = await matchingService.addToQueue(socketId, userType, userSessionId);
 
     if (match) {
       // Match found immediately - let the WebSocket service handle notification

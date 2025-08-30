@@ -21,7 +21,8 @@ export const sanitizeInput = (input: string): string => {
 export const schemas = {
   matchRequest: Joi.object({
     userType: Joi.string().valid('venter', 'listener').required(),
-    socketId: Joi.string().min(1).max(100).required()
+    socketId: Joi.string().min(1).max(100).required(),
+    userSessionId: Joi.string().uuid().optional()
   }),
 
   reportSubmission: Joi.object({
@@ -40,7 +41,8 @@ export const schemas = {
     sessionId: Joi.string().uuid().required(),
     userType: Joi.string().valid('venter', 'listener').required(),
     username: Joi.string().min(1).max(50).optional(),
-    profilePhoto: Joi.string().max(200 * 1024).optional() // Max 200KB base64
+    profilePhoto: Joi.string().max(200 * 1024).optional(), // Max 200KB base64
+    userSessionId: Joi.string().uuid().optional()
   }),
 
   endSession: Joi.object({

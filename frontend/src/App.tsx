@@ -6,13 +6,14 @@ import { Message } from "./types/chat";
 import { matchingApiService } from "./services/matchingService";
 import { useSocket } from "./hooks/useSocket";
 import { reportService } from "./services/reportService";
+import { useUsername } from "./hooks/useUsername";
 
 
 type ViewState = "initial" | "form" | "guidelines" | "waiting" | "matched";
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewState>("initial");
-  const [username, setUsername] = useState("");
+  const { username, setUsername } = useUsername();
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [usernameConfirmed, setUsernameConfirmed] = useState(false);
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
@@ -127,6 +128,13 @@ function App() {
   useEffect(() => {
     setShowButtonsAnimation(showButtons);
   }, [showButtons]);
+
+  // Auto-confirm username if it's already persisted
+  useEffect(() => {
+    if (username.trim().length > 0 && !usernameConfirmed) {
+      setUsernameConfirmed(true);
+    }
+  }, [username, usernameConfirmed]);
 
   useEffect(() => {
     // Touch handling for mobile devices

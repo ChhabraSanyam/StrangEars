@@ -1,3 +1,5 @@
+import { userSessionIdManager } from '../utils/userSessionId';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 export interface MatchRequest {
@@ -49,12 +51,13 @@ class MatchingApiService {
    */
   async requestMatch(userType: 'venter' | 'listener', socketId: string): Promise<MatchResponse> {
     try {
+      const userSessionId = userSessionIdManager.getUserSessionId();
       const response = await fetch(`${API_BASE_URL}/match`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userType, socketId }),
+        body: JSON.stringify({ userType, socketId, userSessionId }),
       });
 
       if (!response.ok) {

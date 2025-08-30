@@ -4,13 +4,14 @@ import { reportService } from '../services/reportService';
 import { SocketService } from '../services/socketService';
 import { reportRateLimit, adminRateLimit } from '../middleware/rateLimiting';
 import { validate, validateQuery, schemas } from '../middleware/validation';
+import { userSessionMappingService } from '../services/userSessionMapping';
 
 const router = Router();
 
 // POST /api/report - Submit a report
 router.post('/report', reportRateLimit, validate(schemas.reportSubmission), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { sessionId, reporterType, reason, reporterSocketId } = req.body;
+    const { sessionId, reporterType, reason, reporterSocketId, reporterUsername, reportedUsername } = req.body;
 
     // Validate required fields
     if (!sessionId) {
@@ -21,17 +22,22 @@ router.post('/report', reportRateLimit, validate(schemas.reportSubmission), asyn
       throw new AppError('Invalid reporter type. Must be "venter" or "listener"', 400);
     }
 
-    // Get the reported user's socket ID from the session
-    let reportedSocketId: string | undefined;
+    // Get the reported user's userSessionId from the session
+    let reportedUserSessionId: string | undefined;
+    
     try {
       const socketService = SocketService.getInstance();
       if (socketService && reporterSocketId) {
         const sessionManager = socketService.getSessionManager();
-        const otherParticipant = await sessionManager.getOtherParticipant(sessionId, reporterSocketId);
-        reportedSocketId = otherParticipant || undefined;
+        const otherParticipantSocketId = await sessionManager.getOtherParticipant(sessionId, reporterSocketId);
+        
+        // Get the userSessionId for the reported user
+        if (otherParticipantSocketId) {
+          reportedUserSessionId = userSessionMappingService.getUserSessionId(otherParticipantSocketId);
+        }
       }
     } catch (error) {
-      console.warn('Could not determine reported user socket ID:', error);
+      console.warn('Could not determine reported user information:', error);
     }
 
     // Create the report with pattern detection
@@ -39,7 +45,9 @@ router.post('/report', reportRateLimit, validate(schemas.reportSubmission), asyn
       sessionId,
       reporterType,
       reason,
-      reportedSocketId
+      reportedUserSessionId,
+      reporterUsername,
+      reportedUsername
     });
 
     // Immediately terminate the session
@@ -145,19 +153,20 @@ router.put('/report/:reportId/resolve', adminRateLimit, async (req: Request, res
   }
 });
 
-// GET /api/report/user/:socketId/analysis - Get pattern analysis for a user (admin endpoint)
-router.get('/report/user/:socketId/analysis', adminRateLimit, async (req: Request, res: Response, next: NextFunction) => {
+// GET /api/report/user/:userSessionId/analysis - Get pattern analysis for a user (admin endpoint)
+router.get('/report/user/:userSessionId/analysis', adminRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { socketId } = req.params;
+    const { userSessionId } = req.params;
 
-    if (!socketId) {
-      throw new AppError('Socket ID is required', 400);
+    if (!userSessionId) {
+      throw new AppError('User session ID is required', 400);
     }
 
-    const analysis = await reportService.getUserPatternAnalysis(socketId);
-    const restriction = await reportService.isUserRestricted(socketId);
+    const analysis = await reportService.getUserPatternAnalysisByUserSessionId(userSessionId);
+    const restriction = await reportService.isUserRestrictedByUserSessionId(userSessionId);
 
     res.status(200).json({
+      userSessionId,
       analysis,
       currentRestriction: restriction,
       timestamp: new Date()

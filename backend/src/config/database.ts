@@ -54,7 +54,9 @@ class Database {
           reporter_type TEXT NOT NULL CHECK (reporter_type IN ('venter', 'listener')),
           reason TEXT CHECK (length(reason) <= 1000),
           timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          resolved BOOLEAN DEFAULT FALSE
+          resolved BOOLEAN DEFAULT FALSE,
+          reporter_username TEXT CHECK (length(reporter_username) <= 100),
+          reported_username TEXT CHECK (length(reported_username) <= 100)
         )
       `);
 
@@ -62,7 +64,7 @@ class Database {
       await this.pgPool.query(`
         CREATE TABLE IF NOT EXISTS user_patterns (
           id TEXT PRIMARY KEY CHECK (length(id) <= 36),
-          socket_id TEXT NOT NULL CHECK (length(socket_id) <= 100),
+          user_session_id TEXT NOT NULL CHECK (length(user_session_id) <= 36),
           session_id TEXT NOT NULL CHECK (length(session_id) <= 100),
           report_type TEXT NOT NULL CHECK (report_type IN ('inappropriate_behavior', 'spam', 'harassment', 'other')),
           reporter_type TEXT NOT NULL CHECK (reporter_type IN ('venter', 'listener')),
@@ -74,7 +76,7 @@ class Database {
       await this.pgPool.query(`
         CREATE TABLE IF NOT EXISTS user_restrictions (
           id TEXT PRIMARY KEY CHECK (length(id) <= 36),
-          socket_id TEXT NOT NULL CHECK (length(socket_id) <= 100),
+          user_session_id TEXT NOT NULL CHECK (length(user_session_id) <= 36),
           restriction_type TEXT NOT NULL CHECK (restriction_type IN ('temporary_ban', 'warning', 'permanent_ban')),
           start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           end_time TIMESTAMP,
@@ -88,10 +90,10 @@ class Database {
       const indexes = [
         "CREATE INDEX IF NOT EXISTS idx_reports_session_id ON reports(session_id)",
         "CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp)",
-        "CREATE INDEX IF NOT EXISTS idx_user_patterns_socket_id ON user_patterns(socket_id)",
+        "CREATE INDEX IF NOT EXISTS idx_user_patterns_user_session_id ON user_patterns(user_session_id)",
         "CREATE INDEX IF NOT EXISTS idx_user_patterns_reported_at ON user_patterns(reported_at)",
         "CREATE INDEX IF NOT EXISTS idx_user_patterns_report_type ON user_patterns(report_type)",
-        "CREATE INDEX IF NOT EXISTS idx_user_restrictions_socket_id ON user_restrictions(socket_id)",
+        "CREATE INDEX IF NOT EXISTS idx_user_restrictions_user_session_id ON user_restrictions(user_session_id)",
         "CREATE INDEX IF NOT EXISTS idx_user_restrictions_active ON user_restrictions(is_active)",
         "CREATE INDEX IF NOT EXISTS idx_user_restrictions_end_time ON user_restrictions(end_time)",
       ];

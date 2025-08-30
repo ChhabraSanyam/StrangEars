@@ -37,6 +37,7 @@ export interface JoinSessionData {
   userType: 'venter' | 'listener';
   username?: string;
   profilePhoto?: string; // Base64 encoded image
+  userSessionId?: string;
 }
 
 export interface SendMessageData {

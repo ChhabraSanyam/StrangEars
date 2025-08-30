@@ -56,20 +56,25 @@ class MatchingService {
   /**
    * Add a user to the appropriate queue and attempt to find a match
    */
-  public async addToQueue(socketId: string, userType: 'venter' | 'listener'): Promise<MatchResult | null> {
+  public async addToQueue(socketId: string, userType: 'venter' | 'listener', userSessionId?: string): Promise<MatchResult | null> {
     // Check if user is restricted before adding to queue
-    try {
-      const restriction = await reportService.isUserRestricted(socketId);
-      if (restriction) {
-        console.log(`Blocked restricted user ${socketId} from joining queue. Restriction: ${restriction.restrictionType}`);
-        throw new Error(`User is currently restricted: ${restriction.reason}`);
+    if (userSessionId) {
+      try {
+        const restriction = await reportService.isUserRestrictedByUserSessionId(userSessionId);
+        
+        if (restriction) {
+          console.log(`Blocked restricted user ${userSessionId} from joining queue. Restriction: ${restriction.restrictionType}`);
+          throw new Error(`User is currently restricted: ${restriction.reason}`);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('restricted')) {
+          throw error; // Re-throw restriction errors
+        }
+        console.warn('Could not check user restriction status:', error);
+        // Continue with matching if restriction check fails
       }
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('restricted')) {
-        throw error; // Re-throw restriction errors
-      }
-      console.warn('Could not check user restriction status:', error);
-      // Continue with matching if restriction check fails
+    } else {
+      console.warn('No userSessionId provided for restriction check, skipping restriction validation');
     }
     if (this.useRedis && this.redisQueueManager) {
       try {

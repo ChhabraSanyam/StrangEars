@@ -8,7 +8,7 @@ class ReportService {
   /**
    * Create a new report and process pattern detection
    */
-  async createReport(reportData: CreateReportData & { reportedSocketId?: string }): Promise<{
+  async createReport(reportData: CreateReportData & { reportedUserSessionId?: string }): Promise<{
     report: Report;
     restriction?: UserRestriction;
     analysis?: PatternAnalysis;
@@ -19,12 +19,14 @@ class ReportService {
       reporterType: reportData.reporterType,
       reason: reportData.reason || 'No reason provided',
       timestamp: new Date(),
-      resolved: false
+      resolved: false,
+      reporterUsername: reportData.reporterUsername,
+      reportedUsername: reportData.reportedUsername
     };
 
     const sql = `
-      INSERT INTO reports (id, session_id, reporter_type, reason, timestamp, resolved)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO reports (id, session_id, reporter_type, reason, timestamp, resolved, reporter_username, reported_username)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -33,22 +35,24 @@ class ReportService {
       report.reporterType,
       report.reason,
       report.timestamp.toISOString(),
-      report.resolved
+      report.resolved,
+      report.reporterUsername || null,
+      report.reportedUsername || null
     ];
 
     await database.run(sql, params);
 
-    // Process pattern detection if we have the reported user's socket ID
+    // Process pattern detection if we have the reported user's userSessionId
     let restriction: UserRestriction | undefined;
     let analysis: PatternAnalysis | undefined;
 
-    if (reportData.reportedSocketId) {
+    if (reportData.reportedUserSessionId) {
       try {
         // Determine report type from reason
         const reportType = this.categorizeReportReason(reportData.reason || '');
         
-        const result = await patternDetectionService.processReportAndApplyRestrictions(
-          reportData.reportedSocketId,
+        const result = await patternDetectionService.processReportAndApplyRestrictionsByUserSessionId(
+          reportData.reportedUserSessionId,
           reportData.sessionId,
           reportType,
           reportData.reporterType
@@ -60,6 +64,8 @@ class ReportService {
         console.error('Error processing pattern detection:', error);
         // Continue without pattern detection if it fails
       }
+    } else {
+      console.warn('No userSessionId provided for pattern detection, skipping restriction processing');
     }
 
     return { report, restriction, analysis };
@@ -88,7 +94,8 @@ class ReportService {
   async getReportsBySession(sessionId: string): Promise<Report[]> {
     const sql = `
       SELECT id, session_id as sessionId, reporter_type as reporterType, 
-             reason, timestamp, resolved
+             reason, timestamp, resolved, reporter_username as reporterUsername,
+             reported_username as reportedUsername
       FROM reports 
       WHERE session_id = ?
       ORDER BY timestamp DESC
@@ -160,7 +167,8 @@ class ReportService {
   async getRecentReports(limit: number = 50): Promise<Report[]> {
     const sql = `
       SELECT id, session_id as sessionId, reporter_type as reporterType, 
-             reason, timestamp, resolved
+             reason, timestamp, resolved, reporter_username as reporterUsername,
+             reported_username as reportedUsername
       FROM reports 
       ORDER BY timestamp DESC
       LIMIT ?
@@ -187,17 +195,17 @@ class ReportService {
   }
 
   /**
-   * Check if a user is currently restricted
+   * Check if a user is currently restricted by userSessionId
    */
-  async isUserRestricted(socketId: string): Promise<UserRestriction | null> {
-    return await patternDetectionService.isUserRestricted(socketId);
+  async isUserRestrictedByUserSessionId(userSessionId: string): Promise<UserRestriction | null> {
+    return await patternDetectionService.isUserRestrictedByUserSessionId(userSessionId);
   }
 
   /**
-   * Get pattern analysis for a user
+   * Get pattern analysis for a user by userSessionId
    */
-  async getUserPatternAnalysis(socketId: string): Promise<PatternAnalysis> {
-    return await patternDetectionService.analyzeUserPattern(socketId);
+  async getUserPatternAnalysisByUserSessionId(userSessionId: string): Promise<PatternAnalysis> {
+    return await patternDetectionService.analyzeUserPatternByUserSessionId(userSessionId);
   }
 
   /**

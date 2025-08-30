@@ -5,6 +5,7 @@ import { matchingService } from "./matchingService";
 import { validateSocketData, schemas, filterContent } from "../middleware/validation";
 import { checkMessageThrottle } from "../middleware/socketThrottling";
 import { checkSocketMessageSpam, resetSpamTrackingForSocket } from "../middleware/spamPrevention";
+import { userSessionMappingService } from "./userSessionMapping";
 
 export interface SocketUser {
   socketId: string;
@@ -12,6 +13,7 @@ export interface SocketUser {
   username?: string;
   profilePhoto?: string;
   sessionId?: string;
+  userSessionId?: string;
   connectedAt: Date;
 }
 
@@ -55,7 +57,7 @@ export class SocketService {
       // Handle user joining (after matching)
       socket.on(
         "join-session",
-        (data: { sessionId: string; userType: "venter" | "listener" }) => {
+        (data: { sessionId: string; userType: "venter" | "listener"; userSessionId?: string }) => {
           // Validate input
           const validation = validateSocketData(data, schemas.joinSession);
           if (!validation.isValid) {
@@ -152,10 +154,10 @@ export class SocketService {
 
   private async handleJoinSession(
     socket: Socket,
-    data: { sessionId: string; userType: "venter" | "listener"; username?: string; profilePhoto?: string }
+    data: { sessionId: string; userType: "venter" | "listener"; username?: string; profilePhoto?: string; userSessionId?: string }
   ): Promise<void> {
     try {
-      const { sessionId, userType, username, profilePhoto } = data;
+      const { sessionId, userType, username, profilePhoto, userSessionId } = data;
 
       // Validate input
       if (
@@ -183,6 +185,12 @@ export class SocketService {
         user.username = username;
         user.profilePhoto = profilePhoto;
         user.sessionId = sessionId;
+        user.userSessionId = userSessionId;
+      }
+
+      // Map socketId to userSessionId if provided
+      if (userSessionId) {
+        userSessionMappingService.mapSocketToUserSession(socket.id, userSessionId);
       }
 
       // Add socket to session group
@@ -467,6 +475,9 @@ export class SocketService {
       // Clean up any sessions for this user
       await this.sessionManager.cleanupUserSessions(socket.id);
 
+      // Clean up userSessionId mapping
+      userSessionMappingService.removeSocketMapping(socket.id);
+
       // Remove user from connected users
       this.connectedUsers.delete(socket.id);
     } catch (error) {
@@ -609,16 +620,19 @@ export class SocketService {
         // Get restriction details
         try {
           const { reportService } = await import('./reportService');
-          const restriction = await reportService.isUserRestricted(socketId);
-          if (restriction) {
-            return {
-              status: "restricted",
-              restrictionInfo: {
-                type: restriction.restrictionType,
-                reason: restriction.reason,
-                endTime: restriction.endTime
-              }
-            };
+          const userSessionId = userSessionMappingService.getUserSessionId(socketId);
+          if (userSessionId) {
+            const restriction = await reportService.isUserRestrictedByUserSessionId(userSessionId);
+            if (restriction) {
+              return {
+                status: "restricted",
+                restrictionInfo: {
+                  type: restriction.restrictionType,
+                  reason: restriction.reason,
+                  endTime: restriction.endTime
+                }
+              };
+            }
           }
         } catch (restrictionError) {
           console.error("Error getting restriction details:", restrictionError);
