@@ -17,7 +17,7 @@ export interface MatchResult {
 class MatchingService {
   private venterQueue: QueueEntry[] = [];
   private listenerQueue: QueueEntry[] = [];
-  private QUEUE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  private QUEUE_TIMEOUT = 3 * 60 * 1000; // 3 minutes
   private socketService: any = null; // Will be set by SocketService
   private useRedis: boolean = false;
   private redisQueueManager: any = null;

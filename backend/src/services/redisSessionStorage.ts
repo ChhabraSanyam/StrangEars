@@ -212,7 +212,7 @@ export class RedisSessionStorage {
           await this.endSession(session.id, socketId);
         }
         
-        // Delete the session data (as per requirement 3.3 - data deletion)
+        // Delete the session data
         await this.deleteSession(session.id);
         cleanedSessions.push(session.id);
       }
@@ -373,7 +373,7 @@ export class RedisSessionStorage {
   }
 
   /**
-   * Auto-cleanup old ended sessions - optimized for free tier memory limits
+   * Auto-cleanup old ended sessions
    */
   async cleanupOldSessions(maxAgeMinutes: number = 30): Promise<number> {
     try {
