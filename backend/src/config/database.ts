@@ -13,8 +13,6 @@ interface DatabaseAdapter {
 
 class PostgreSQLAdapter implements DatabaseAdapter {
   private pgPool: Pool;
-  private lastHealthCheck: { result: boolean; timestamp: number } | null = null;
-  private healthCheckCacheDuration = 30000; // 30 seconds
 
   constructor(connectionString: string) {
     this.pgPool = new Pool({
@@ -23,29 +21,16 @@ class PostgreSQLAdapter implements DatabaseAdapter {
         process.env.NODE_ENV === "production"
           ? { rejectUnauthorized: false }
           : false,
-      max: 10, // Reduced from 20
-      min: 2, // Keep minimum connections alive
-      idleTimeoutMillis: 300000, // 5 minutes instead of 30 seconds
-      connectionTimeoutMillis: 5000, // Increased timeout
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
       statement_timeout: 30000,
       query_timeout: 30000,
-      acquireTimeoutMillis: 60000, // Add acquire timeout
     });
 
     this.pgPool.on("error", (err: Error) => {
       console.error("PostgreSQL connection error:", err);
     });
-
-    // Add connection event logging (only in development)
-    if (process.env.NODE_ENV === "development") {
-      this.pgPool.on("connect", () => {
-        console.log("New PostgreSQL connection established");
-      });
-      
-      this.pgPool.on("remove", () => {
-        console.log("PostgreSQL connection removed from pool");
-      });
-    }
   }
 
   private convertSqliteToPostgres(sql: string): string {
@@ -90,20 +75,12 @@ class PostgreSQLAdapter implements DatabaseAdapter {
   }
 
   async healthCheck(): Promise<boolean> {
-    // Return cached result if still valid
-    const now = Date.now();
-    if (this.lastHealthCheck && (now - this.lastHealthCheck.timestamp) < this.healthCheckCacheDuration) {
-      return this.lastHealthCheck.result;
-    }
-
     try {
       const client = await this.pgPool.connect();
       await client.query("SELECT 1");
       client.release();
-      this.lastHealthCheck = { result: true, timestamp: now };
       return true;
     } catch {
-      this.lastHealthCheck = { result: false, timestamp: now };
       return false;
     }
   }
@@ -187,7 +164,6 @@ class Database {
     // Try PostgreSQL first
     if (process.env.DATABASE_URL) {
       try {
-        console.log("Attempting to connect to PostgreSQL...");
         const pgAdapter = new PostgreSQLAdapter(process.env.DATABASE_URL);
         
         // Test the connection
@@ -195,13 +171,6 @@ class Database {
         if (isHealthy) {
           this.adapter = pgAdapter;
           this.usingPostgreSQL = true;
-          console.log("Connected to PostgreSQL successfully");
-          console.log("Pool configuration:", {
-            max: 10,
-            min: 2,
-            idleTimeoutMillis: 300000,
-            connectionTimeoutMillis: 5000
-          });
           await this.initializeTables();
           return;
         }
@@ -217,7 +186,6 @@ class Database {
     try {
       this.adapter = new SQLiteAdapter();
       this.usingPostgreSQL = false;
-      console.log("Connected to SQLite successfully");
       await this.initializeTables();
     } catch (error) {
       console.error("SQLite fallback failed:", error);
@@ -419,12 +387,6 @@ class Database {
     if (!this.isValidSql(sql)) {
       throw new Error("Invalid SQL statement");
     }
-    
-    // Log queries in development (but limit to avoid spam)
-    if (process.env.NODE_ENV === "development" && !sql.includes("SELECT 1")) {
-      console.log(`[DB Query] ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`, params?.length ? `[${params.length} params]` : '');
-    }
-    
     return await this.adapter.run(sql, params);
   }
 
@@ -436,12 +398,6 @@ class Database {
     if (!this.isValidSql(sql)) {
       throw new Error("Invalid SQL statement");
     }
-    
-    // Log queries in development (but limit to avoid spam)
-    if (process.env.NODE_ENV === "development" && !sql.includes("SELECT 1")) {
-      console.log(`[DB Query] ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`, params?.length ? `[${params.length} params]` : '');
-    }
-    
     return await this.adapter.get<T>(sql, params);
   }
 
@@ -450,12 +406,6 @@ class Database {
     if (!this.isValidSql(sql)) {
       throw new Error("Invalid SQL statement");
     }
-    
-    // Log queries in development (but limit to avoid spam)
-    if (process.env.NODE_ENV === "development" && !sql.includes("SELECT 1")) {
-      console.log(`[DB Query] ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`, params?.length ? `[${params.length} params]` : '');
-    }
-    
     return await this.adapter.all<T>(sql, params);
   }
 

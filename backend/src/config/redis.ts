@@ -48,7 +48,6 @@ class RedisClient {
       }
 
       this.client.on('connect', () => {
-        console.log('Redis client connected');
         this.isConnected = true;
       });
 
@@ -58,12 +57,11 @@ class RedisClient {
       });
 
       this.client.on('close', () => {
-        console.log('Redis client connection closed');
         this.isConnected = false;
       });
 
       this.client.on('reconnecting', () => {
-        console.log('Redis client reconnecting...');
+        // Reconnecting silently
       });
 
       // Test the connection with timeout
@@ -74,7 +72,6 @@ class RedisClient {
 
       await Promise.race([connectPromise, timeoutPromise]);
       await this.client.ping();
-      console.log('Redis connection established successfully');
 
     } catch (error) {
       console.error('Failed to connect to Redis:', error);

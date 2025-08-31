@@ -44,8 +44,6 @@ export class SocketService {
 
   private setupEventHandlers(): void {
     this.io.on("connection", (socket: Socket) => {
-      console.log(`Socket connected: ${socket.id} from ${socket.handshake.address}`);
-
       // Track connected user immediately
       const user: SocketUser = {
         socketId: socket.id,
@@ -591,8 +589,12 @@ export class SocketService {
     };
   }> {
     try {
+      // Get user info for better logging
+      const user = this.connectedUsers.get(socketId);
+      const userSessionId = userSessionMappingService.getUserSessionId(socketId);
+      
       // Add to matching queue
-      const match = await matchingService.addToQueue(socketId, userType);
+      const match = await matchingService.addToQueue(socketId, userType, userSessionId, user?.username);
 
       if (match) {
         // Immediate match found - notify both users

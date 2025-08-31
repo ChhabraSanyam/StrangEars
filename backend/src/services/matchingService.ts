@@ -56,14 +56,14 @@ class MatchingService {
   /**
    * Add a user to the appropriate queue and attempt to find a match
    */
-  public async addToQueue(socketId: string, userType: 'venter' | 'listener', userSessionId?: string): Promise<MatchResult | null> {
+  public async addToQueue(socketId: string, userType: 'venter' | 'listener', userSessionId?: string, username?: string): Promise<MatchResult | null> {
     // Check if user is restricted before adding to queue
     if (userSessionId) {
       try {
         const restriction = await reportService.isUserRestrictedByUserSessionId(userSessionId);
         
-        if (restriction) {
-          console.log(`Blocked restricted user ${userSessionId} from joining queue. Restriction: ${restriction.restrictionType}`);
+        if (restriction && (restriction.restrictionType === 'temporary_ban' || restriction.restrictionType === 'permanent_ban')) {
+          console.log(`Blocked user ${username || userSessionId} - ${restriction.restrictionType}`);
           
           // Calculate remaining time for temporary restrictions
           let timeRemaining = '';

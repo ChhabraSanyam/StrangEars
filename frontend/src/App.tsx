@@ -486,10 +486,7 @@ function App() {
     try {
       // Always compress profile pictures for optimal performance
       // Since they're displayed at 32px, aggressive compression is acceptable
-      console.log('Optimizing profile picture...');
       const processedFile = await compressImage(file);
-      
-      console.log(`Image optimized: ${file.size} bytes → ${processedFile.size} bytes (${Math.round((1 - processedFile.size / file.size) * 100)}% reduction)`);
       
       // Final size check after compression (should be very small now)
       if (processedFile.size > 100 * 1024) { // 100KB limit after compression

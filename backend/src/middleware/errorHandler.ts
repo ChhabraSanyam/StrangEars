@@ -48,7 +48,10 @@ export const errorHandler = (
   };
 
   // Log error for debugging (in production, use proper logging)
-  console.error(`Error ${statusCode}: ${message}`, err.stack);
+  // Skip logging for restriction errors as they're already logged concisely
+  if (!message.includes('restricted')) {
+    console.error(`Error ${statusCode}: ${message}`, err.stack);
+  }
 
   res.status(statusCode).json(errorResponse);
 };
